@@ -1,0 +1,42 @@
+name: Release
+
+# Manual fallback: builds the Windows installer on GitHub and publishes it as a release (Actions -> Release -> Run workflow).
+# Installed copies of VELOX Studio pick the update up automatically (electron-updater).
+on:
+  # manual only: releases are built + tested locally and published with gh (see README)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Bundle FFmpeg (not in git - too big)
+        shell: pwsh
+        run: |
+          # ffprobe from FFmpeg-Builds, ffmpeg from gyan.dev "full" (has the whisper filter for subtitles)
+          Invoke-WebRequest 'https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-9.0.zip' -OutFile ff.zip
+          tar -xf ff.zip
+          $d = Get-ChildItem -Directory ffmpeg-n9.0-* | Select-Object -First 1
+          Copy-Item "$($d.FullName)\bin\ffprobe.exe" vendor\ffmpeg\
+          Invoke-WebRequest 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z' -OutFile gyan.7z
+          7z x gyan.7z -ogyan -y | Out-Null
+          $g = Get-ChildItem -Recurse gyan -Filter ffmpeg.exe | Select-Object -First 1
+          Copy-Item $g.FullName vendor\ffmpeg\
+      - name: Bundle VC++ runtime (app-local, needed by the AI runtime on fresh PCs)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force vendor\vcrt | Out-Null
+          foreach ($f in 'msvcp140.dll','msvcp140_1.dll','msvcp140_2.dll','msvcp140_atomic_wait.dll','vcruntime140.dll','vcruntime140_1.dll','concrt140.dll') { Copy-Item "$env:SystemRoot\System32\$f" vendor\vcrt\ -ErrorAction SilentlyContinue }
+      - name: Build & publish installer
+        run: npx electron-builder --win nsis --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

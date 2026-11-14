@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>VELOX Studio</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' file: data: blob: media:; connect-src 'self' https: http://127.0.0.1:* file: data: blob:; img-src * file: data: blob:; media-src * file: blob: data:;" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body class="mode-pro">
+  <div id="app">
+    <header id="titlebar">
+      <div class="brand"><span class="logo">V</span><span class="brand-name">VELOX<b>Studio</b></span></div>
+      <nav id="menubar"></nav>
+      <div id="workspaces"></div>
+      <div class="drag-space"></div>
+      <div id="title-project" class="muted"></div>
+      <div class="title-tools">
+        <select id="mode-select" title="Modus"></select>
+        <select id="lang-select"><option value="de">DE</option><option value="en">EN</option></select>
+        <button id="btn-export-top" class="btn primary"><span data-i18n="export">Exportieren</span></button>
+      </div>
+      <div class="win-buttons">
+        <button data-win="minimize">&#x2013;</button><button data-win="maximize">&#x25A1;</button><button data-win="close" class="close">&#x2715;</button>
+      </div>
+    </header>
+
+    <main id="workspace">
+      <section id="panel-left" class="panel">
+        <div class="tabs" id="left-tabs"></div>
+        <div class="panel-body" id="left-body"></div>
+      </section>
+      <div class="splitter v" data-split="left"></div>
+      <section id="panel-center" class="panel">
+        <div id="viewer">
+          <div id="viewer-top">
+            <span id="viewer-title" data-i18n="timeline_view">Timeline</span>
+            <div class="spacer"></div>
+            <select id="preview-quality"></select>
+            <select id="preview-zoom"><option value="fit">Fit</option><option value="0.5">50%</option><option value="1">100%</option></select>
+            <button class="icon-btn" id="btn-safe" title="Safe Zones">&#x2B1A;</button>
+            <button class="icon-btn" id="btn-fullscreen" title="Vollbild">&#x26F6;</button>
+          </div>
+          <div id="viewer-stage">
+            <div id="canvas-wrap"><canvas id="preview-canvas"></canvas><div id="viewer-overlay"></div></div>
+          </div>
+          <div id="transport">
+            <div class="tc" id="tc-current">00:00:00:00</div>
+            <div class="transport-buttons">
+              <button class="icon-btn" data-act="goStart" title="Anfang (Home)">&#x23EE;</button>
+              <button class="icon-btn" data-act="prevFrame" title="Frame zurück (←)">&#x25C0;&#xFE0E;|</button>
+              <button class="icon-btn big" id="btn-play" data-act="togglePlay" title="Play/Pause (Leertaste)">&#x25B6;</button>
+              <button class="icon-btn" data-act="nextFrame" title="Frame vor (→)">|&#x25B6;&#xFE0E;</button>
+              <button class="icon-btn" data-act="goEnd" title="Ende (End)">&#x23ED;</button>
+              <button class="icon-btn" id="btn-loop" data-act="toggleLoop" title="Loop In/Out">&#x27F2;</button>
+              <button class="icon-btn" data-act="markIn" title="In-Punkt (I)">{</button>
+              <button class="icon-btn" data-act="markOut" title="Out-Punkt (O)">}</button>
+            </div>
+            <div class="tc muted" id="tc-duration">00:00:00:00</div>
+            <div id="meters"><div class="meter"><i id="meter-l"></i></div><div class="meter"><i id="meter-r"></i></div></div>
+          </div>
+        </div>
+      </section>
+      <div class="splitter v" data-split="right"></div>
+      <section id="panel-right" class="panel">
+        <div class="tabs" id="right-tabs"></div>
+        <div class="panel-body" id="inspector"></div>
+      </section>
+    </main>
+    <div class="splitter h" data-split="bottom"></div>
+    <section id="panel-timeline" class="panel">
+      <div id="tl-toolbar"></div>
+      <div id="tl-main">
+        <div id="tl-headers"><div id="tl-headers-top"></div><div id="tl-headers-tracks"></div></div>
+        <div id="tl-area"><canvas id="tl-canvas" tabindex="0"></canvas><div id="tl-scroll-h"><div></div></div></div>
+      </div>
+    </section>
+    <footer id="statusbar">
+      <span id="status-text">Bereit</span>
+      <div class="spacer"></div>
+      <span id="status-jobs"></span>
+      <span id="status-project" class="muted"></span>
+      <span id="status-gpu" class="muted"></span>
+      <span id="status-api" class="muted"></span>
+    </footer>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+  <div id="ctx-root"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

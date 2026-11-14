@@ -1,0 +1,5 @@
+{
+  "name": "VELOX Beispiel-Plugin",
+  "main": "index.js",
+  "description": "Zeigt, wie Plugins eigene GLSL-Effekte, Übergänge und Befehle hinzufügen (Thermal-Kamera, Herz-Zoom, Befehl 'Alles rot')."
+}

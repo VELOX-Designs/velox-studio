@@ -1,0 +1,131 @@
+{
+  "name": "velox-studio",
+  "productName": "VELOX Studio",
+  "version": "0.4.3",
+  "description": "VELOX Studio – eigenes Videoschnittprogramm mit GPU-Effekten, 3D, KI und Auto-Edit",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis",
+    "release": "electron-builder --win nsis --publish always"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11",
+    "onnxruntime-node": "^1.31.1"
+  },
+  "author": "VELOX",
+  "homepage": "https://github.com/VELOX-Designs/velox-studio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VELOX-Designs/velox-studio.git"
+  },
+  "build": {
+    "appId": "com.velox.studio",
+    "productName": "VELOX Studio",
+    "copyright": "Copyright © 2026 VELOX Studio",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "plugins/**/*",
+      "tools/**/*",
+      "package.json",
+      "LICENSE",
+      "!**/node_modules/onnxruntime-node/bin/napi-v*/linux/**",
+      "!**/node_modules/onnxruntime-node/bin/napi-v*/darwin/**",
+      "!**/node_modules/onnxruntime-node/bin/napi-v*/win32/arm64/**"
+    ],
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**",
+      "node_modules/onnxruntime-common/**",
+      "src/neural/**",
+      "tools/**",
+      "plugins/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "VELOX-Studio-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "VELOX Studio",
+      "uninstallDisplayName": "VELOX Studio",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "language": "1031",
+      "multiLanguageInstaller": false,
+      "license": "LICENSE",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "menuCategory": false,
+      "displayLanguageSelector": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "VELOX-Designs",
+        "repo": "velox-studio",
+        "releaseType": "release"
+      }
+    ],
+    "fileAssociations": [
+      {
+        "ext": "velox",
+        "name": "VELOX.Projekt",
+        "description": "VELOX Studio Projekt",
+        "icon": "icon",
+        "role": "Editor"
+      },
+      {
+        "ext": "vxfoto",
+        "name": "VELOX.Foto",
+        "description": "VELOX Foto Projekt",
+        "icon": "icon",
+        "role": "Editor"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "*.exe",
+          "*.txt"
+        ]
+      }
+    ],
+    "extraFiles": [
+      {
+        "from": "vendor/vcrt",
+        "to": ".",
+        "filter": [
+          "*.dll"
+        ]
+      }
+    ]
+  }
+}
