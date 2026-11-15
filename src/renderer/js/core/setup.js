@@ -92,16 +92,53 @@ async function downloadFfmpeg(sys) {
 }
 
 // ------------------------------------------------------------------ updates
+// Status-bar button: "✓ v0.4.5" → "⬇ Update 0.4.6 … 42 %" → "⟳ Jetzt aktualisieren" (one click: save, silent install, restart)
 let readyInfo = null;
+const upd = { state: 'idle', version: null, percent: 0, notes: '' };
+function updButton() {
+  let b = document.getElementById('status-update');
+  if (!b) {
+    const bar = document.getElementById('statusbar'); if (!bar) return null;
+    b = el('button', { id: 'status-update', class: 'upd-btn', onclick: () => onUpdClick() });
+    const gpu = document.getElementById('status-gpu'); bar.insertBefore(b, gpu || null);
+  }
+  return b;
+}
+function drawUpd() {
+  const b = updButton(); if (!b) return;
+  b.className = 'upd-btn ' + upd.state;
+  const v = paths.version;
+  if (upd.state === 'ready') { b.textContent = '⟳ ' + L(`Update ${upd.version} – jetzt aktualisieren`, `Update ${upd.version} – install now`); b.title = (upd.notes || '') + '\n\n' + L('Klick: Projekt wird gespeichert, VELOX aktualisiert sich und startet neu (ca. 10 s). Ohne Klick wird das Update beim nächsten Schließen installiert.', 'Click: saves, updates and restarts (~10 s). Otherwise it installs when you close VELOX.'); }
+  else if (upd.state === 'downloading') { b.textContent = `⬇ ${L('Update', 'Update')} ${upd.version} ${Math.round(upd.percent)} %`; b.title = L('Wird im Hintergrund geladen – du kannst weiterarbeiten.', 'Downloading in the background.'); }
+  else if (upd.state === 'checking') { b.textContent = '… ' + L('Suche Updates', 'Checking'); b.title = ''; }
+  else if (upd.state === 'error') { b.textContent = '⚠ ' + L('Update-Prüfung fehlgeschlagen', 'Update check failed'); b.title = upd.notes + '\n' + L('Klick: nochmal versuchen', 'Click: retry'); }
+  else if (upd.state === 'dev') { b.textContent = 'v' + v + ' (dev)'; b.title = L('Updates gibt es nur in der installierten Version.', 'Updates only in the installed version.'); }
+  else { b.textContent = '✓ v' + v; b.title = L('Du hast die neueste Version – Klick: jetzt nach Updates suchen', 'Up to date – click to check'); }
+}
+async function onUpdClick() {
+  if (upd.state === 'ready') return installNow();
+  if (upd.state === 'downloading') return toast(L('Update wird noch geladen…', 'Still downloading…'));
+  upd.state = 'checking'; drawUpd();
+  const r = await ipcRenderer.invoke('update:check');
+  if (r.state === 'dev') { upd.state = 'dev'; drawUpd(); return; }
+  if (r.state === 'error') { upd.state = 'error'; upd.notes = r.message || ''; drawUpd(); return; }
+  if (!r.version || r.version === paths.version) { upd.state = 'idle'; drawUpd(); toast(L('Du hast die neueste Version (' + paths.version + ').', 'You are up to date (' + paths.version + ').'), 'ok'); }
+}
+async function installNow() {
+  try { const { saveProject } = await import('./fileops.js'); const { store } = await import('./project.js'); if (store.dirty && store.p.clips.length && store.filePath) await saveProject(false); } catch {}
+  const b = updButton(); if (b) { b.textContent = '⟳ ' + L('Aktualisiere… VELOX startet gleich neu', 'Updating… restarting'); b.disabled = true; }
+  ipcRenderer.send('app:clean-exit'); ipcRenderer.send('update:install');
+}
 export function initUpdates() {
+  ipcRenderer.invoke('update:state').then((st) => { if (!st.packaged) upd.state = 'dev'; if (st.ready) { upd.state = 'ready'; upd.version = st.ready; readyInfo = { version: st.ready }; } drawUpd(); }).catch(() => drawUpd());
   ipcRenderer.on('update:status', (e, s) => {
-    if (s.state === 'available') toast(L(`Update ${s.version} gefunden – wird im Hintergrund geladen…`, `Update ${s.version} found – downloading…`), '', 5000);
-    if (s.state === 'ready') {
-      readyInfo = s;
-      modal({ title: L('Update bereit', 'Update ready'), body: L(`VELOX Studio ${s.version} wurde geladen. Jetzt neu starten und installieren? (Dein Projekt wird vorher gespeichert, falls nötig.)`, `VELOX Studio ${s.version} is ready. Restart and install now?`),
-        buttons: [{ label: L('Später (beim Beenden)', 'Later (on quit)'), value: false }, { label: L('Jetzt neu starten', 'Restart now'), cls: 'primary', onClick: async () => { const { saveProject } = await import('./fileops.js'); const { store } = await import('./project.js'); if (store.dirty && store.p.clips.length) await saveProject(false); ipcRenderer.send('app:clean-exit'); ipcRenderer.send('update:install'); } }] });
-    }
-    if (s.state === 'error' && s.manual) toast(L('Update-Fehler: ', 'Update error: ') + s.message, 'err');
+    if (s.state === 'checking' && upd.state !== 'ready' && upd.state !== 'downloading') upd.state = 'checking';
+    if (s.state === 'available') { upd.state = 'downloading'; upd.version = s.version; upd.percent = 0; upd.notes = s.notes || ''; }
+    if (s.state === 'progress' && upd.state === 'downloading') upd.percent = s.percent || 0;
+    if (s.state === 'none' && upd.state === 'checking') upd.state = 'idle';
+    if (s.state === 'ready') { readyInfo = s; upd.state = 'ready'; upd.version = s.version; toast(L(`Update ${s.version} ist bereit – unten rechts auf „Jetzt aktualisieren“ klicken`, `Update ${s.version} ready – click "install now" bottom right`), 'ok', 8000); }
+    if (s.state === 'error' && upd.state !== 'ready') { upd.state = 'error'; upd.notes = s.message || ''; }
+    drawUpd();
   });
 }
 registerCommands([
@@ -111,7 +148,7 @@ registerCommands([
     else if (r.state === 'error') toast(L('Update-Prüfung fehlgeschlagen: ', 'Update check failed: ') + r.message, 'err', 8000);
     else if (!r.version || r.version === paths.version) toast(L('Du hast die neueste Version (' + paths.version + ').', 'You are up to date (' + paths.version + ').'), 'ok');
   } },
-  { id: 'installUpdate', name: { de: 'Update jetzt installieren', en: 'Install update now' }, cat: 'help', run: () => { if (!readyInfo) { toast(L('Kein Update geladen', 'No update downloaded')); return; } ipcRenderer.send('update:install'); } },
+  { id: 'installUpdate', name: { de: 'Update jetzt installieren', en: 'Install update now' }, cat: 'help', run: () => { if (!readyInfo) { toast(L('Kein Update geladen', 'No update downloaded')); return; } installNow(); } },
 ]);
 
 // ------------------------------------------------------------------ bug report (for testers on other PCs)

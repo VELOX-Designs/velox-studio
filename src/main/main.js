@@ -95,7 +95,7 @@ ipcMain.handle('app:paths', () => ({
 }));
 
 // ------------------------------------------------------------------ auto updates (GitHub Releases)
-let updater = null;
+let updater = null; let lastReady = null;
 function setupUpdater() {
   if (!app.isPackaged) return;
   try {
@@ -104,16 +104,19 @@ function setupUpdater() {
     updater.autoInstallOnAppQuit = true;
     const send = (state, info = {}) => win?.webContents.send('update:status', { state, ...info });
     updater.on('checking-for-update', () => send('checking'));
-    updater.on('update-available', (i) => send('available', { version: i.version }));
+    updater.on('update-available', (i) => send('available', { version: i.version, notes: typeof i.releaseNotes === 'string' ? i.releaseNotes.replace(/<[^>]+>/g, '').slice(0, 600) : '' }));
     updater.on('update-not-available', () => send('none'));
     updater.on('download-progress', (p) => send('progress', { percent: p.percent }));
-    updater.on('update-downloaded', (i) => send('ready', { version: i.version }));
+    updater.on('update-downloaded', (i) => { lastReady = i.version; send('ready', { version: i.version }); });
     updater.on('error', (e) => send('error', { message: String(e?.message || e).slice(0, 300) }));
     setTimeout(() => updater.checkForUpdates().catch(() => {}), 8000);
+    setInterval(() => { if (!lastReady) updater.checkForUpdates().catch(() => {}); }, 30 * 60 * 1000); // every 30 min
   } catch (e) { console.warn('updater', e); }
 }
 ipcMain.handle('update:check', async () => { if (!updater) return { state: 'dev' }; try { const r = await updater.checkForUpdates(); return { state: 'ok', version: r?.updateInfo?.version }; } catch (e) { return { state: 'error', message: e.message }; } });
-ipcMain.on('update:install', () => { if (updater) { forceClose = true; updater.quitAndInstall(false, true); } });
+// silent install (no setup window) and restart VELOX right after
+ipcMain.on('update:install', () => { if (updater) { forceClose = true; setImmediate(() => updater.quitAndInstall(true, true)); } });
+ipcMain.handle('update:state', () => ({ ready: lastReady, packaged: app.isPackaged, version: app.getVersion() }));
 
 ipcMain.handle('dialog:open', (e, opts) => dialog.showOpenDialog(win, opts));
 ipcMain.handle('dialog:save', (e, opts) => dialog.showSaveDialog(win, opts));
