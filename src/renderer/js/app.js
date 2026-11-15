@@ -12,6 +12,21 @@ window.addEventListener('error', (e) => { console.error(e.error || e.message); l
 window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); logIpc('renderer-rejection', e.reason); });
 { const ce = console.error.bind(console); console.error = (...a) => { ce(...a); logIpc('console-error', a.map((x) => x?.stack || (typeof x === 'object' ? (() => { try { return JSON.stringify(x); } catch { return String(x); } })() : String(x))).join(' ')); }; }
 
+// Sliders/inputs inside draggable cards (effect list, photo layers): the card must never steal the mouse.
+// While a control is pressed, its draggable ancestors are switched off and any drag is cancelled.
+{
+  const CTRL = 'input, select, textarea, button, [contenteditable="true"], .no-drag';
+  const off = []; let pressing = false;
+  window.addEventListener('pointerdown', (e) => {
+    if (!e.target.closest?.(CTRL)) return;
+    pressing = true;
+    for (let n = e.target.parentElement; n; n = n.parentElement) if (n.getAttribute?.('draggable') === 'true') { n.setAttribute('draggable', 'false'); off.push(n); }
+  }, true);
+  const restore = () => { pressing = false; while (off.length) off.pop().setAttribute('draggable', 'true'); };
+  window.addEventListener('pointerup', restore, true); window.addEventListener('pointercancel', restore, true); window.addEventListener('blur', restore);
+  window.addEventListener('dragstart', (e) => { if (pressing) e.preventDefault(); }, true);
+}
+
 async function boot() {
   await initPaths();
   // graphics check: without WebGL2 the preview/export cannot work → tell the user what to do
