@@ -35,7 +35,7 @@ FFmpeg ist im Installer enthalten. KI-Modelle werden erst geladen, wenn du eine 
 | | |
 |---|---|
 | 🎬 **Schnitt** | Magnetische Timeline, Schneiden am Playhead, Snapping mit Einrast-Linie, Sequenzen, Multicam, Quell-Monitor |
-| 🧩 **Vorlagen** | 178 TikTok-/Cinematic-Vorlagen (Car Edits, Blaulicht, Hype, Gaming/RP …) – **auch ein einziges langes Video reicht, die KI sucht die besten Stellen**. Eigene Vorlagen aus deinem Edit oder aus einem fertigen Video (Schnitte + Sound 1:1) |
+| 🧩 **Vorlagen** | **Vorlagen Eigene** (nachgebaut aus echten Edits) + 177 TikTok-/Cinematic-Vorlagen (Car Edits, Blaulicht, Hype, Gaming/RP …) – **auch ein einziges langes Video reicht, die KI sucht die besten Stellen**. Eigene Vorlagen aus deinem Edit oder aus einem fertigen Video (Schnitte 1:1) |
 | 🌀 **Übergänge** | **1100+** GPU-Übergänge, die die Clips verschmelzen – Länge frei einstellbar |
 | 🎨 **Effekte & Farbe** | 185 Effekte, Filter/Looks, Farbräder, Kurven, LUTs, 3D-Ebenen mit Kamera, Keyframes & Graph-Editor |
 | ⚡ **Tempo & Audio** | Velocity/Speed-Ramps, KI-Zeitlupe, Stimm-Effekte, Mixer, Beat-Erkennung, Soundeffekte-Bibliothek |
@@ -70,7 +70,7 @@ Für den Installer müssen `vendor/ffmpeg/ffmpeg.exe`, `ffprobe.exe` und `vendor
 - Einstellungen, KI-Modelle, Logs: `%APPDATA%\velox-studio`
 - Probleme? **Hilfe → Fehlerbericht erstellen** und die Datei vom Desktop schicken.
 
-<sub>Bildmaterial in den Screenshots: <a href="https://mango.blender.org">Tears of Steel</a> © Blender Foundation, Lizenz <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</sub>
+<sub>Bildmaterial in Screenshots und Vorlagen-Vorschaubildern: <a href="https://mango.blender.org">Tears of Steel</a> © Blender Foundation, Lizenz <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.</sub>
 
 <p align="center"><img src=".github/readme/divider.png" width="100%" alt=""></p>
 

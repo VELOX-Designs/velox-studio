@@ -400,3 +400,7 @@ input[type=range]::-webkit-slider-thumb { background: #fff; }
 .upd-btn.ready:hover { filter: brightness(1.1); background: var(--ac); color: #041416; }
 .upd-btn.error { color: var(--warn); }
 @keyframes updPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(30,200,212,.55); } 50% { box-shadow: 0 0 0 6px rgba(30,200,212,0); } }
+
+.tpl-sec-h.own b { color: var(--ac); font-size: 14px; }
+.tpl-divider { display: flex; align-items: center; gap: 10px; margin: 14px 0 0; color: var(--tx2); font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
+.tpl-divider::before, .tpl-divider::after { content: ''; flex: 1; height: 1px; background: var(--line2); }

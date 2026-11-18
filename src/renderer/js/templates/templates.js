@@ -4,7 +4,7 @@
 import { store, newClip, sourceLength, clipEnd, dropBrokenTransitions } from '../core/project.js';
 import { el, $, bus, uid, deepClone, fileUrl, tc } from '../core/util.js';
 import { L, N } from '../core/i18n.js';
-import { paths } from '../core/settings.js';
+import { paths, settings, setSetting } from '../core/settings.js';
 import { registerCommands, run } from '../core/commands.js';
 import { modal, toast, progressModal, promptBox, confirmBox, contextMenu } from '../ui/dialogs.js';
 import { importFiles, thumbs, addTextClip, freeVideoTrack, ALL_EXT } from '../core/media.js';
@@ -24,7 +24,7 @@ export function userTemplates() {
   const out = [];
   for (const n of fs.readdirSync(tplRoot())) {
     const f = path.join(tplRoot(), n, 'template.json');
-    try { if (fs.existsSync(f)) { const t = JSON.parse(fs.readFileSync(f, 'utf8')); t.dir = path.dirname(f); t.cat = t.cat || 'mine'; t.mine = true; out.push(t); } } catch (e) { console.warn('template', n, e); }
+    try { if (fs.existsSync(f)) { const t = JSON.parse(fs.readFileSync(f, 'utf8')); t.dir = path.dirname(f); t.cat = !t.cat || t.cat === 'mine' ? 'eigene' : t.cat; t.mine = true; out.push(t); } } catch (e) { console.warn('template', n, e); }
   }
   return out.sort((a, b) => (b.created || 0) - (a.created || 0));
 }
@@ -41,7 +41,7 @@ const ASPECT = { '9:16': [1080, 1920], '16:9': [1920, 1080], '1:1': [1080, 1080]
 const totalOf = (t) => t.total || t.slots.reduce((s, x) => s + x.dur, 0);
 
 // ------------------------------------------------------------------ gallery (Vorlagen tab)
-const CAT_STYLE = { mine: ['#1ec8d4', '⭐'], car: ['#ff5a1f', '🏎'], cinematic: ['#c9a25a', '🎬'], hype: ['#ff2d6f', '⚡'], blaulicht: ['#2f6bff', '🚨'], gaming: ['#26c281', '🎮'], trend: ['#e85cff', '✨'], story: ['#ffb547', '📷'], sport: ['#ff7a00', '🏀'], party: ['#b04dff', '🪩'], retro: ['#ff6fa8', '📼'] };
+const CAT_STYLE = { eigene: ['#1ec8d4', '⭐'], mine: ['#1ec8d4', '⭐'], car: ['#ff5a1f', '🏎'], cinematic: ['#c9a25a', '🎬'], hype: ['#ff2d6f', '⚡'], blaulicht: ['#2f6bff', '🚨'], gaming: ['#26c281', '🎮'], trend: ['#e85cff', '✨'], story: ['#ffb547', '📷'], sport: ['#ff7a00', '🏀'], party: ['#b04dff', '🪩'], retro: ['#ff6fa8', '📼'] };
 let cat = 'all', q = '', fmt = '9:16';
 const fmtOf = (t) => (t.aspect === '9:16' || t.aspect === '4:5' ? '9:16' : '16:9');
 export function templatesTab(body) {
@@ -51,19 +51,24 @@ export function templatesTab(body) {
   search.oninput = () => { q = search.value; drawBody(); };
   const seg = el('div', { class: 'tpl-seg' }, ...[['9:16', L('Hochformat', 'Vertical')], ['16:9', L('Querformat', 'Landscape')]].map(([k, n]) => el('button', { class: fmt === k ? 'on' : '', onclick: () => { fmt = k; templatesTabRefresh(body); } }, n)));
   const chips = el('div', { class: 'tpl-cats' });
-  const avail = list.filter((t) => fmtOf(t) === fmt || t.mine);
+  const avail = list.filter((t) => fmtOf(t) === fmt || t.mine || t.cat === 'eigene');
   for (const [k, n] of Object.entries(TEMPLATE_CATS)) { const cnt = k === 'all' ? avail.length : avail.filter((t) => t.cat === k).length; if (!cnt && k !== 'all') continue; chips.append(el('button', { class: 'tpl-chip' + (cat === k ? ' on' : ''), onclick: () => { cat = k; templatesTabRefresh(body); } }, N(n))); }
   const tools = el('div', { class: 'tpl-tools' },
     el('button', { class: 'tpl-make', title: L('Aus deinem aktuellen Edit eine Vorlage machen', 'Make a template from your current edit'), onclick: () => run('templateFromTimeline') }, el('b', {}, '＋ ' + L('Aus meinem Edit', 'From my edit')), el('span', {}, L('Timeline als Vorlage', 'Timeline as template'))),
-    el('button', { class: 'tpl-make', title: L('Aus einem fertigen Video (Schnitte + Sound 1:1)', 'From a finished video'), onclick: () => run('templateFromVideo') }, el('b', {}, '🎞 ' + L('Aus fertigem Video', 'From finished video')), el('span', {}, L('Schnitte + Sound 1:1', 'Cuts + sound 1:1'))));
+    el('button', { class: 'tpl-make', title: L('Aus einem fertigen Video (Schnitte + Übergänge 1:1)', 'From a finished video'), onclick: () => run('templateFromVideo') }, el('b', {}, '🎞 ' + L('Aus fertigem Video', 'From finished video')), el('span', {}, L('Schnitte + Effekte 1:1', 'Cuts + effects 1:1'))));
   const content = el('div', { class: 'tpl-content' });
   const drawBody = () => {
     content.innerHTML = '';
     const items = avail.filter((t) => (cat === 'all' || t.cat === cat) && (!q || (t.name + ' ' + (N(TEMPLATE_CATS[t.cat]) || '')).toLowerCase().includes(q.toLowerCase())));
-    if (!items.length) { content.append(el('div', { class: 'tpl-empty' }, cat === 'mine' ? L('Noch keine eigenen Vorlagen – „Aus meinem Edit“ oder „Aus fertigem Video“.', 'No own templates yet.') : L('Nichts gefunden', 'Nothing found'))); return; }
+    if (!items.length) { content.append(el('div', { class: 'tpl-empty' }, cat === 'eigene' ? L('Noch keine eigenen Vorlagen – „Aus meinem Edit“ oder „Aus fertigem Video“.', 'No own templates yet.') : L('Nichts gefunden', 'Nothing found'))); return; }
     if (cat === 'all' && !q) {
       // one tidy section per category (like CapCut): 6 cards + "Alle ›"
-      const order = ['mine', 'car', 'cinematic', 'hype', 'blaulicht', 'gaming', 'trend', 'story', 'sport', 'party', 'retro'];
+      // "Vorlagen Eigene" always on top and complete; below: the generated ones by category
+      const own = items.filter((t) => t.cat === 'eigene');
+      content.append(el('div', { class: 'tpl-sec-h own' }, el('b', {}, '⭐ ' + L('Vorlagen Eigene', 'Own templates')), el('span', { class: 'muted' }, String(own.length))),
+        own.length ? el('div', { class: 'tpl-grid' }, ...own.map(card)) : el('div', { class: 'tpl-empty' }, L('Noch keine – „Aus meinem Edit“ oder „Aus fertigem Video“.', 'None yet.')),
+        el('div', { class: 'tpl-divider' }, el('span', {}, L('Weitere Vorlagen', 'More templates'))));
+      const order = ['car', 'cinematic', 'hype', 'blaulicht', 'gaming', 'trend', 'story', 'sport', 'party', 'retro'];
       for (const k of order) {
         const sec = items.filter((t) => t.cat === k); if (!sec.length) continue;
         content.append(el('div', { class: 'tpl-sec-h' }, el('b', {}, N(TEMPLATE_CATS[k]) || k), el('span', { class: 'muted' }, String(sec.length)), el('span', { class: 'spacer' }), sec.length > 6 ? el('button', { class: 'tpl-more', onclick: () => { cat = k; templatesTabRefresh(body); } }, L('Alle', 'All') + ' ›') : null),
@@ -78,7 +83,7 @@ export function templatesTab(body) {
 function templatesTabRefresh(body) { const st = body.scrollTop; body.innerHTML = ''; templatesTab(body); body.scrollTop = st; }
 function card(t) {
   const [color, icon] = CAT_STYLE[t.cat] || CAT_STYLE.mine;
-  const thumb = t.dir && fs.existsSync(path.join(t.dir, 'thumb.jpg')) ? `url("${fileUrl(path.join(t.dir, 'thumb.jpg'))}")` : null;
+  const thumb = t.dir && fs.existsSync(path.join(t.dir, 'thumb.jpg')) ? `url("${fileUrl(path.join(t.dir, 'thumb.jpg'))}")` : t.thumbAsset ? `url("${t.thumbAsset}")` : null;
   const tot = totalOf(t);
   const bars = el('div', { class: 'tpl-bars' }); t.slots.slice(0, 30).forEach((s) => bars.append(el('i', { style: { flex: s.dur / tot } })));
   const cover = el('div', { class: 'tpl-cover' + (thumb ? ' img' : '') },
@@ -169,6 +174,7 @@ function slotSourceLen(s) { const c = newClip({ dur: s.dur, ramp: s.ramp && VELO
 export async function useTemplate(t) {
   const assign = t.slots.map(() => null);
   let sel = 0; let music = { kind: t.music ? 'template' : 'none', mediaId: null }; let beatSync = true; let keepAudio = false;
+  let logoFile = t.logo ? (settings.templateLogo && fs.existsSync(settings.templateLogo) ? settings.templateLogo : null) : null;
   const [W, H] = ASPECT[t.aspect] || ASPECT['9:16'];
   const strip = el('div', { class: 'tp-strip' });
   const editor = el('div', { class: 'tp-editor' });
@@ -233,6 +239,16 @@ export async function useTemplate(t) {
         setTimeout(async () => { const pm = progressModal(L('KI schneidet…', 'AI cutting…')); try { await smartAssign(t, assign, list, (x) => pm.set(0.5, x)); } finally { pm.close(); } drawStrip(); drawEditor(); toast(L('Fertig – jeden Platz kannst du noch anpassen', 'Done – adjust any slot'), 'ok'); }, 30);
       } }] });
   };
+  const logoRow = el('div', { class: 'row', style: { margin: '8px 0 0', flexWrap: 'wrap' } });
+  const drawLogo = () => {
+    logoRow.innerHTML = ''; if (!t.logo) return;
+    const imgs = store.p.media.filter((m) => m.type === 'image');
+    const s2 = el('select', {}, el('option', { value: '' }, L('— ohne Logo —', '— no logo —')), ...imgs.map((m) => el('option', { value: m.path }, m.name)), logoFile && !imgs.some((m) => m.path === logoFile) ? el('option', { value: logoFile }, path.basename(logoFile)) : null);
+    s2.value = logoFile || ''; s2.onchange = () => { logoFile = s2.value || null; if (logoFile) setSetting('templateLogo', logoFile); drawLogo(); };
+    const pick = el('button', { class: 'btn small', onclick: async () => { const r = await ipcRenderer.invoke('dialog:open', { properties: ['openFile'], filters: [{ name: 'Bild', extensions: ['png', 'webp', 'jpg', 'jpeg', 'svg'] }] }); if (r.canceled) return; logoFile = r.filePaths[0]; setSetting('templateLogo', logoFile); drawLogo(); } }, L('Logo vom PC…', 'Logo from PC…'));
+    const prev = logoFile ? el('img', { src: fileUrl(logoFile), style: { height: '28px', borderRadius: '4px', background: '#000', padding: '2px' } }) : null;
+    logoRow.append(el('b', {}, 'Logo'), s2, pick, prev, el('span', { class: 'muted', style: { fontSize: '11px' } }, L('kommt ins Intro, in die Blitzer und ins Outro (PNG mit transparentem Hintergrund am besten)', 'used for intro, flashes and outro (transparent PNG works best)')));
+  };
   const drawMusic = () => {
     musicRow.innerHTML = '';
     const auds = store.p.media.filter((m) => m.type === 'audio');
@@ -246,16 +262,16 @@ export async function useTemplate(t) {
   const body = el('div', { class: 'tp-dialog' },
     el('div', { class: 'row', style: { margin: '0 0 8px' } }, el('span', { class: 'muted' }, `${t.aspect} · ${t.slots.length} Clips · ${totalOf(t).toFixed(1)} s${t.bpm ? ' · ' + t.bpm + ' BPM' : ''}${t.look ? ' · Look: ' + (BUILTIN_PRESETS.find((p) => p.id === t.look)?.name || t.look) : ''}`), el('span', { class: 'spacer' }),
       el('button', { class: 'btn small primary', onclick: () => aiFill() }, '✨ ' + L('KI füllt alle Plätze', 'AI fills all slots'))),
-    strip, editor, musicRow);
-  drawStrip(); drawEditor(); drawMusic();
+    strip, editor, musicRow, logoRow);
+  drawStrip(); drawEditor(); drawMusic(); drawLogo();
   modal({ title: (t.emoji || '✦') + ' ' + t.name, body, width: 1080, onClose: () => vid?.pause(), buttons: [
     { label: L('Abbrechen', 'Cancel'), value: null },
     { label: L('Edit erstellen', 'Create edit'), cls: 'primary', onClick: () => {
       const missing = assign.map((x, i) => (x ? null : i + 1)).filter(Boolean);
       if (missing.length === assign.length) { toast(L('Wähle mindestens einen Clip (oder „Alle automatisch füllen“)', 'Choose at least one clip'), 'err', 5000); return false; }
-      if (missing.length) { const used = [...new Set(assign.filter(Boolean).map((a) => a.mediaId))].map((id) => store.media(id)); const tmp = t.slots.map(() => null); vid?.pause(); setTimeout(async () => { const pm = progressModal(L('KI füllt leere Plätze…', 'AI filling empty slots…')); try { await smartAssign(t, tmp, used.length ? used : vidMedia()); } finally { pm.close(); } missing.forEach((x) => (assign[x - 1] = tmp[x - 1])); buildTemplate(t, assign, { music, beatSync, keepAudio }).catch((e) => toast(e.message, 'err', 8000)); }, 30); return; }
+      if (missing.length) { const used = [...new Set(assign.filter(Boolean).map((a) => a.mediaId))].map((id) => store.media(id)); const tmp = t.slots.map(() => null); vid?.pause(); setTimeout(async () => { const pm = progressModal(L('KI füllt leere Plätze…', 'AI filling empty slots…')); try { await smartAssign(t, tmp, used.length ? used : vidMedia()); } finally { pm.close(); } missing.forEach((x) => (assign[x - 1] = tmp[x - 1])); buildTemplate(t, assign, { music, beatSync, keepAudio, logoFile }).catch((e) => toast(e.message, 'err', 8000)); }, 30); return; }
       vid?.pause();
-      setTimeout(() => buildTemplate(t, assign, { music, beatSync, keepAudio }).catch((e) => toast(e.message, 'err', 8000)), 30);
+      setTimeout(() => buildTemplate(t, assign, { music, beatSync, keepAudio, logoFile }).catch((e) => toast(e.message, 'err', 8000)), 30);
     } },
   ] });
 }
@@ -266,11 +282,12 @@ async function beatTimes(t, musicMedia) {
   const r = await detectBeats(musicMedia.path, 0, Math.min(musicMedia.duration, totalOf(t) * 1.6 + 10));
   return r.beats || [];
 }
-export async function buildTemplate(t, assign, { music = { kind: 'none' }, beatSync = true, keepAudio = false } = {}) {
+export async function buildTemplate(t, assign, { music = { kind: 'none' }, beatSync = true, keepAudio = false, logoFile = null } = {}) {
   const pm = progressModal(L('Vorlage wird gebaut…', 'Building template…'));
   try {
     // music
-    let musicMedia = null;
+    let musicMedia = null; let logoMedia = null;
+    if (t.logo && logoFile && fs.existsSync(logoFile)) [logoMedia] = await importFiles([logoFile]);
     if (music.kind === 'template' && t.music?.file) { const f = path.isAbsolute(t.music.file) ? t.music.file : path.join(t.dir, t.music.file); [musicMedia] = await importFiles([f]); }
     else if (music.kind === 'media') musicMedia = store.media(music.mediaId);
     // slot timing (template grid, optionally snapped to the beats of the chosen song)
@@ -290,7 +307,7 @@ export async function buildTemplate(t, assign, { music = { kind: 'none' }, beatS
     const [W, H] = ASPECT[t.aspect] || [store.p.settings.width, store.p.settings.height];
     const { newSeq } = await import('../core/sequences.js');
     newSeq({ name: t.name, width: W, height: H, fps: store.p.settings.fps || 30 });
-    const total = durs.reduce((a, b) => a + b, 0);
+    const total = durs.reduce((a, b) => a + b, 0) + (t.tail || 0); // tail = logo outro after the last clip
     store.edit(L('Vorlage: ', 'Template: ') + t.name, (p) => {
       p.clips = []; p.transitions = []; p.markers = [];
       const vTrack = p.tracks.find((x) => x.kind === 'video');
@@ -304,7 +321,7 @@ export async function buildTemplate(t, assign, { music = { kind: 'none' }, beatS
         if (m.type === 'video') { let need = sourceLength(c); if (need > m.duration - 0.02) { c.ramp = null; c.speed = Math.max(0.1, (m.duration - 0.05) / d); need = sourceLength(c); } if (c.in + need > m.duration) c.in = Math.max(0, m.duration - need - 0.02); }
         // cover the frame (vertical template + landscape clip) × user zoom/position
         const mw = m.width || W, mh = m.height || H; const fit = Math.min(W / mw, H / mh), cover = Math.max(W / mw, H / mh) / fit;
-        c.transform.scale = cover * (a.zoom || 1); c.transform.x = (a.x || 0) * W; c.transform.y = (a.y || 0) * H;
+        c.transform.scale = (s.fit ? 1 : cover) * (a.zoom || 1); c.transform.x = (a.x || 0) * W; c.transform.y = (a.y || 0) * H;
         if (s.fadeIn) c.fadeIn = s.fadeIn; if (s.fadeOut) c.fadeOut = s.fadeOut;
         for (const f of s.fx || []) if (EFFECTS[f.type]) c.effects.push({ id: uid('fx'), type: f.type, enabled: true, params: Object.assign(defaultParams(f.type), deepClone(f.params || {})) });
         if (ramp && VELOCITY_PRESETS[s.ramp]?.fx && EFFECTS.motionblur && !c.effects.some((f) => f.type === 'motionblur')) c.effects.push({ id: uid('fx'), type: 'motionblur', enabled: true, params: defaultParams('motionblur') });
@@ -328,6 +345,13 @@ export async function buildTemplate(t, assign, { music = { kind: 'none' }, beatS
       // texts (scaled when the grid was re-timed)
       const k = total / Math.max(0.01, totalOf(t));
       for (const x of t.texts || []) { const pr = BUILTIN_PRESETS.find((q) => q.id === x.preset); const tc0 = addTextClip(p, x.t * k, { ...(pr?.text || {}), ...(x.style || {}), content: x.content }, Math.max(0.03, x.dur * k)); if (x.pos) { tc0.transform.x = x.pos[0] * W; tc0.transform.y = x.pos[1] * H; } }
+      // logo overlays (intro watermark, flash frames, outro)
+      if (logoMedia) for (const it of t.logo.items || []) {
+        const st = it.t * k, du = Math.max(0.05, it.dur * k); const vt4 = freeVideoTrack(p, st, st + du, 1);
+        const lc = newClip({ trackId: vt4.id, type: 'image', mediaId: logoMedia.id, name: 'Logo', start: st, dur: du, fadeIn: it.fadeIn || 0, fadeOut: it.fadeOut || 0 });
+        lc.transform.scale = it.scale || 0.3; lc.transform.x = (it.pos?.[0] || 0) * W; lc.transform.y = (it.pos?.[1] || 0) * H; if (it.opacity != null) lc.transform.opacity = it.opacity;
+        p.clips.push(lc);
+      }
       // colour flashes / solids (e.g. white flash frames)
       for (const x of t.solids || []) { const vt3 = freeVideoTrack(p, x.t * k, (x.t + x.dur) * k, 1); p.clips.push(newClip({ trackId: vt3.id, type: 'solid', name: L('Blitz', 'Flash'), start: x.t * k, dur: Math.max(0.03, x.dur * k), solid: { color: x.color || '#ffffff', gradient: '' }, fadeIn: x.fadeIn || 0, fadeOut: x.fadeOut || 0 })); }
       // music
@@ -346,7 +370,7 @@ export async function buildTemplate(t, assign, { music = { kind: 'none' }, beatS
 
 // ------------------------------------------------------------------ create templates
 // from the current timeline: main video track becomes the slots, everything else (fx, ramps, transitions, texts, music) is kept
-async function fromTimeline({ name, cat = 'mine' } = {}) {
+async function fromTimeline({ name, cat = 'eigene' } = {}) {
   const p = store.p;
   const vt = p.tracks.find((x) => x.kind === 'video');
   const main = p.clips.filter((c) => c.trackId === vt.id && (c.type === 'video' || c.type === 'image')).sort((a, b) => a.start - b.start);
@@ -366,13 +390,13 @@ async function fromTimeline({ name, cat = 'mine' } = {}) {
   const musicClip = p.clips.filter((c) => c.type === 'audio' && !c.linkId).sort((a, b) => b.dur - a.dur)[0];
   const t = { name, cat, aspect: Math.abs(p.settings.width / p.settings.height - 9 / 16) < 0.05 ? '9:16' : Math.abs(p.settings.width / p.settings.height - 1) < 0.05 ? '1:1' : '16:9', slots, trans, texts, adjust, total, emoji: '⭐', desc: L('Aus deinem Edit', 'From your edit') };
   const dir = saveUserTemplate(t);
-  if (musicClip) { const m = store.media(musicClip.mediaId); const out = path.join(dir, 'music' + path.extname(m.path)); fs.copyFileSync(m.path, out); t.music = { file: path.basename(out), start: musicClip.in - musicClip.start, name: m.name }; }
+  void musicClip; // the song is not stored in templates
   try { const c = $('#preview-canvas'); const th = document.createElement('canvas'); th.width = 360; th.height = Math.round((360 * c.height) / c.width); th.getContext('2d').drawImage(c, 0, 0, th.width, th.height); fs.writeFileSync(path.join(dir, 'thumb.jpg'), Buffer.from(th.toDataURL('image/jpeg', 0.85).split(',')[1], 'base64')); } catch {}
   fs.writeFileSync(path.join(dir, 'template.json'), JSON.stringify({ ...t, id: JSON.parse(fs.readFileSync(path.join(dir, 'template.json'), 'utf8')).id, created: Date.now() }, null, 1));
   bus.emit('templates'); toast(L(`Vorlage „${name}“ gespeichert (${slots.length} Clips)`, `Template "${name}" saved`), 'ok'); return dir;
 }
 // from a finished video: cuts (scene detection) → slots with exact lengths, sound 1:1, flashes/dips → transitions
-async function fromVideo({ file, name, cat = 'mine', threshold = 0.3 } = {}) {
+async function fromVideo({ file, name, cat = 'eigene', threshold = 0.3 } = {}) {
   if (!file) { const r = await ipcRenderer.invoke('dialog:open', { title: L('Fertiges Edit wählen', 'Choose a finished edit'), properties: ['openFile'], filters: [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm'] }] }); if (r.canceled) return; file = r.filePaths[0]; }
   name = name || (await promptBox(L('Name der Vorlage', 'Template name'), path.basename(file).replace(/\.[^.]+$/, ''))); if (!name) return;
   const { detectScenes } = await import('../ai/tools.js');
@@ -392,16 +416,16 @@ async function fromVideo({ file, name, cat = 'mine', threshold = 0.3 } = {}) {
       slots.push({ dur: +d.toFixed(3), ramp: null, fx: [], zoom: 1 });
       if (i < bounds.length - 2) { const c = bounds[i + 1]; let mx = 0, mn = 255; for (let k = -3; k <= 3; k++) { const v = at(c + k / fps); mx = Math.max(mx, v); mn = Math.min(mn, v); } const base = (at(c - 0.4) + at(c + 0.4)) / 2; if (mx > 200 && mx > base + 60) trans.push({ after: slots.length - 1, type: 'flash', dur: 0.2 }); else if (mn < 18 && base > 50) trans.push({ after: slots.length - 1, type: 'dipblack', dur: 0.3 }); }
     }
-    const t = { name, cat, aspect: Math.abs(w / h - 9 / 16) < 0.06 ? '9:16' : Math.abs(w / h - 1) < 0.06 ? '1:1' : '16:9', slots, trans, texts: [], total: dur, emoji: '🎞', desc: L('Aus fertigem Video: Schnitte + Sound 1:1', 'From a finished video: cuts + sound 1:1') };
+    const t = { name, cat, aspect: Math.abs(w / h - 9 / 16) < 0.06 ? '9:16' : Math.abs(w / h - 1) < 0.06 ? '1:1' : '16:9', slots, trans, texts: [], total: dur, emoji: '🎞', desc: L('Aus fertigem Video: Schnitte 1:1', 'From a finished video: cuts 1:1') };
     const dir = saveUserTemplate(t);
     pm.set(0.85, L('Sound & Vorschau speichern…', 'Saving sound & preview…'));
-    if (info.hasAudio !== false) { try { await ff(['-i', file, '-vn', '-c:a', 'aac', '-b:a', '256k', path.join(dir, 'music.m4a')]); t.music = { file: 'music.m4a', start: 0, name: path.basename(file) }; } catch {} }
+    // templates never carry the song – only cuts/effects/transitions; the user picks the music when using it
     try { await ff(['-ss', String(Math.min(dur / 3, 2)), '-i', file, '-frames:v', '1', '-vf', 'scale=360:-2', path.join(dir, 'thumb.jpg')]); } catch {}
     try { await ff(['-i', file, '-t', String(Math.min(dur, 12)), '-an', '-vf', 'scale=360:-2', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '30', path.join(dir, 'preview.mp4')]); t.reference = path.join(dir, 'preview.mp4'); } catch {}
     const id = JSON.parse(fs.readFileSync(path.join(dir, 'template.json'), 'utf8')).id;
     fs.writeFileSync(path.join(dir, 'template.json'), JSON.stringify({ ...t, id, created: Date.now(), source: file }, null, 1));
     bus.emit('templates');
-    toast(L(`Vorlage „${name}“: ${slots.length} Clips, ${trans.length} Übergänge, Sound 1:1`, `Template "${name}": ${slots.length} clips`), 'ok', 6000);
+    toast(L(`Vorlage „${name}“: ${slots.length} Clips, ${trans.length} Übergänge`, `Template "${name}": ${slots.length} clips`), 'ok', 6000);
     return dir;
   } finally { pm.close(); }
 }

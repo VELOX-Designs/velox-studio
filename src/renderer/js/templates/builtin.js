@@ -67,7 +67,7 @@ const STYLES = [
   { key: 'action', cat: 'cinematic', emoji: '🔥', name: ['Action Cut', 'Chase Scene', 'Shootout', 'Heist'], colors: ['#ff5722', '#150500'], bpm: [140, 150, 160], pat: 'drop', aspect: '16:9',
     ramps: ['hero', 'bullet', 'velocityEdit', null], rampChance: 0.6, trans: ['flash', 'whippan', 'zoompunch', 'shake'], transEvery: 1, fx: [fx('shake', { amp: 16, freq: 14 }), fx('letterbox'), fx('sparks')], fxChance: 0.35, look: ['cine_action', 'look_teal_orange'], intro: null, outro: null },
 ];
-export const TEMPLATE_CATS = { all: { de: 'Alle', en: 'All' }, car: { de: 'Car Edits', en: 'Car edits' }, cinematic: { de: 'Cinematic', en: 'Cinematic' }, hype: { de: 'Hype / Beat', en: 'Hype / beat' }, blaulicht: { de: 'Blaulicht', en: 'Emergency' }, gaming: { de: 'Gaming / RP', en: 'Gaming / RP' }, trend: { de: 'Trends', en: 'Trends' }, story: { de: 'Story / Vlog', en: 'Story / vlog' }, sport: { de: 'Sport', en: 'Sport' }, party: { de: 'Party', en: 'Party' }, retro: { de: 'Retro', en: 'Retro' }, mine: { de: 'Meine', en: 'Mine' } };
+export const TEMPLATE_CATS = { all: { de: 'Alle', en: 'All' }, eigene: { de: 'Vorlagen Eigene', en: 'Own templates' }, car: { de: 'Car Edits', en: 'Car edits' }, cinematic: { de: 'Cinematic', en: 'Cinematic' }, hype: { de: 'Hype / Beat', en: 'Hype / beat' }, blaulicht: { de: 'Blaulicht', en: 'Emergency' }, gaming: { de: 'Gaming / RP', en: 'Gaming / RP' }, trend: { de: 'Trends', en: 'Trends' }, story: { de: 'Story / Vlog', en: 'Story / vlog' }, sport: { de: 'Sport', en: 'Sport' }, party: { de: 'Party', en: 'Party' }, retro: { de: 'Retro', en: 'Retro' } };
 
 function build(st, vi, seed) {
   const r = rng(seed);
