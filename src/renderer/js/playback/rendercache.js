@@ -28,6 +28,20 @@ class RenderCache {
     bus.on('time', () => { if (!this.playing()) { this.cancel(); this.scheduleIdle(); } });
     bus.on('export:start', () => { window.__exporting = true; this.cancel(); });
     bus.on('export:end', () => { window.__exporting = false; this.scheduleIdle(); });
+    // the user always wins: any input pauses background rendering, it resumes after a quiet moment
+    const poke = () => { this.lastInput = performance.now(); if (this.job?.auto) this.cancel(); if (!this.playing()) this.scheduleIdle(); };
+    for (const ev of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(ev, poke, { capture: true, passive: true });
+  }
+  // encoder pool: WebP encoding runs in workers (off the UI thread, in parallel)
+  encoder() {
+    if (this.pool) return this.pool;
+    const src = 'onmessage = async (e) => { const { id, bm, q } = e.data; try { const c = new OffscreenCanvas(bm.width, bm.height); c.getContext("2d").drawImage(bm, 0, 0); bm.close(); postMessage({ id, b: await c.convertToBlob({ type: "image/webp", quality: q }) }); } catch (err) { postMessage({ id, err: String(err) }); } };';
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    const n = Math.max(2, Math.min(6, (navigator.hardwareConcurrency || 4) >> 1));
+    const waits = new Map(); let seq = 0, rr = 0;
+    const ws = Array.from({ length: n }, () => { const w = new Worker(url); w.onmessage = (e) => { const f = waits.get(e.data.id); waits.delete(e.data.id); f?.(e.data.b || null); }; return w; });
+    this.pool = { size: n, encode: (bm) => new Promise((res) => { const id = ++seq; waits.set(id, res); ws[rr++ % n].postMessage({ id, bm, q: 0.82 }, [bm]); }) };
+    return this.pool;
   }
   playing() { return !!this.engine?.playing; }
   // ---------------------------------------------------------------- signatures
@@ -36,9 +50,10 @@ class RenderCache {
     const visual = P.clips.filter((c) => c.type !== 'audio');
     const vtr = P.tracks.filter((t) => t.kind === 'video');
     const global = hash(JSON.stringify([P.settings.width, P.settings.height, P.settings.bg, P.settings.fps, size, vtr.map((t) => [t.id, t.hidden, t.muted, t.solo, t.opacity, t.blend]),
-      visual.some((c) => c.type === 'compound' || c.type === 'multicam') ? P.sequences : 0, P.camera || 0, P.media.map((m) => [m.id, m.path, m.proxyPath && settings.useProxies !== false ? 1 : 0])]));
+      visual.some((c) => c.type === 'compound' || c.type === 'multicam') ? P.sequences : 0, P.camera || 0]));
     const ch = new Map();
-    for (const c of visual) ch.set(c.id, hash(JSON.stringify(c) + JSON.stringify(P.transitions.filter((t) => t.a === c.id || t.b === c.id))));
+    const msig = (id) => { const m = P.media.find((x) => x.id === id); return m ? m.path + (m.proxyPath ? '|px' : '') : ''; };
+    for (const c of visual) ch.set(c.id, hash(JSON.stringify(c) + JSON.stringify(P.transitions.filter((t) => t.a === c.id || t.b === c.id)) + msig(c.mediaId)));
     const pts = new Set([0]); for (const c of visual) { pts.add(c.start); pts.add(clipEnd(c)); }
     for (const t of P.transitions) { const a = P.clips.find((c) => c.id === t.a); if (a) { pts.add(clipEnd(a) - (t.dur || 0)); pts.add(clipEnd(a) + (t.dur || 0)); } }
     const b = [...pts].filter((x) => x >= 0).sort((x, y) => x - y);
@@ -80,7 +95,12 @@ class RenderCache {
   scheduleIdle() {
     clearTimeout(this.idleT);
     if (!this.enabled || settings.renderCacheAuto === false) return;
-    this.idleT = setTimeout(() => { if (!this.playing() && !this.job && !window.__exporting) this.renderRange(null, null, { auto: true }).catch((e) => console.warn('render cache', e)); }, 2500);
+    this.idleT = setTimeout(() => {
+      if (this.playing() || this.job || window.__exporting) return;
+      if (store.p.media.some((m) => m._proxying)) { this.scheduleIdle(); return; } // proxies first – decoding the originals would be slow
+      if (performance.now() - (this.lastInput || 0) < 1500) { this.scheduleIdle(); return; }
+      this.renderRange(null, null, { auto: true }).catch((e) => console.warn('render cache', e));
+    }, 1500);
   }
   store(fi, sig, blob) {
     const old = this.frames.get(fi); if (old) this.bytes -= old.blob.size;
@@ -107,7 +127,7 @@ class RenderCache {
   async renderRange(a, b, { auto = false, onProgress } = {}) {
     if (!this.enabled || !this.preview) return 0;
     this.cancel();
-    const job = (this.job = { cancelled: false });
+    const job = (this.job = { cancelled: false, auto });
     const P = JSON.parse(JSON.stringify(store.p)); const fps = P.settings.fps || store.fps;
     const W = this.preview.width, H = this.preview.height;
     if (this.size[0] !== W || this.size[1] !== H) { this.frames.clear(); this.bytes = 0; this.size = [W, H]; this.segs = null; }
@@ -123,24 +143,28 @@ class RenderCache {
     const cv = (this.cv ||= document.createElement('canvas'));
     const comp = (this.comp ||= new Compositor(cv, { preserve: true }));
     comp.setSize(W, H);
-    let prov = new ExportProvider(P, W, H);
+    const useProxy = settings.useProxies !== false;
+    let prov = new ExportProvider(P, W, H, { proxy: useProxy });
+    const pool = this.encoder(); const inflight = new Set();
     let done = 0, last = -2;
     try {
       if (P.clips.some((c) => c.reverse && c.type === 'video')) await prov.prepareReverse();
       for (const f of need) {
         if (job.cancelled) break;
-        if (f !== last + 1) { prov.close(); const rv = prov.reversed; prov = new ExportProvider(P, W, H); prov.reversed = rv; } // jump → fresh readers
+        if (f !== last + 1) { prov.close(); const rv = prov.reversed; prov = new ExportProvider(P, W, H, { proxy: useProxy }); prov.reversed = rv; } // jump → fresh readers
         last = f;
         const t = f / fps;
         await prov.prepare(t);
         if (job.cancelled) break;
         comp.renderFrame(P, t, prov);
-        const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.85));
-        if (job.cancelled || !blob) break;
-        this.store(f, this.sigAt(t, segs), blob);
-        done++; onProgress?.(done / need.length);
-        if (done % 6 === 0) { bus.emit('rendercache'); await new Promise((r) => setTimeout(r, auto ? 4 : 0)); }
+        const bm = await createImageBitmap(cv);
+        const sig = this.sigAt(t, segs);
+        const pr = pool.encode(bm).then((blob) => { inflight.delete(pr); if (blob && !job.cancelled) { this.store(f, sig, blob); done++; onProgress?.(done / need.length); if (done % 10 === 0) bus.emit('rendercache'); } });
+        inflight.add(pr);
+        if (inflight.size >= pool.size * 2) await Promise.race(inflight);
+        await new Promise((r) => setTimeout(r, 0)); // keep the UI responsive
       }
+      await Promise.all(inflight);
     } finally { prov.close(); if (this.job === job) this.job = null; bus.emit('rendercache'); }
     return done;
   }

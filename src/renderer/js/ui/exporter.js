@@ -252,7 +252,7 @@ export function buildAudioGraph(P, rangeStart, rangeEnd, inputOffset) {
 
 // ------------------------------------------------------------------ export provider
 export class ExportProvider {
-  constructor(P, W, H) { this.P = P; this.W = W; this.H = H; this.readers = new Map(); this.frames = new Map(); this.images = new Map(); this.reversed = new Map(); }
+  constructor(P, W, H, { proxy = false } = {}) { this.P = P; this.W = W; this.H = H; this.useProxy = proxy; this.readers = new Map(); this.frames = new Map(); this.images = new Map(); this.reversed = new Map(); }
   async prepareReverse() {
     for (const c of this.P.clips.filter((c) => c.type === 'video' && c.reverse)) {
       const m = this.P.media.find((x) => x.id === c.mediaId);
@@ -277,7 +277,7 @@ export class ExportProvider {
         if (!this.images.has(m.id)) { const im = new Image(); im.src = 'file:///' + m.path.replace(/\\/g, '/'); await im.decode().catch(() => {}); this.images.set(m.id, im); }
         continue;
       }
-      let file = m.path, st = sourceTime(clip, lt);
+      let file = this.useProxy && m.proxyPath && fs.existsSync(m.proxyPath) ? m.proxyPath : m.path, st = sourceTime(clip, lt);
       const rv = this.reversed.get(clip.id);
       if (rv) { file = rv.file; st = clamp(rv.start + rv.len - st, 0, rv.len - 0.001); }
       st = clamp(st, 0, Math.max(0, m.duration - 0.5 / (m.fps || 30)));

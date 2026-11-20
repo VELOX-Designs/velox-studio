@@ -163,15 +163,40 @@ export function decodePcm(file, rate = 22050, channels = 1, start = 0, dur = 0) 
   });
 }
 
-// preview proxy: H.264 short GOP, max 1280 wide (or 960 for "low")
+// preview proxy: 720p, keyframe every 0.5 s (instant seeking), GPU decode + GPU encode when available.
+// Alpha videos (WebM VP9 / ProRes 4444 …) get a VP9-alpha proxy so transparency survives.
+export function hasAlpha(file) {
+  return new Promise((res) => execFile(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=pix_fmt:stream_tags', '-of', 'json', file], { windowsHide: true }, (e, out) => {
+    try { const s = JSON.parse(out).streams[0] || {}; const t = Object.fromEntries(Object.entries(s.tags || {}).map(([k, v]) => [k.toLowerCase(), v])); res(t.alpha_mode === '1' || /yuva|rgba|argb|bgra|ya8|gbrap/.test(s.pix_fmt || '')); } catch { res(false); }
+  }));
+}
+// seconds between the first two keyframes (long-GOP files – e.g. game/screen recorder exports – seek very slowly)
+export function keyframeGap(file) {
+  return new Promise((res) => execFile(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-skip_frame', 'nokey', '-show_entries', 'frame=pts_time', '-of', 'csv=p=0', '-read_intervals', '%+12', file], { windowsHide: true, timeout: 20000 }, (e, out) => {
+    const t = String(out || '').split(/\r?\n/).map(parseFloat).filter((x) => !isNaN(x));
+    res(t.length >= 2 ? t[1] - t[0] : 12);
+  }));
+}
 export async function makeProxy(media, { height = 720, onProgress, signal } = {}) {
   const key = cacheKey(media.path);
-  const out = path.join(cacheDir('proxies'), `${key}_${height}p.mp4`);
+  const alpha = await hasAlpha(media.path);
+  const out = path.join(cacheDir('proxies'), `${key}_${height}p${alpha ? '_a.webm' : '.mp4'}`);
   if (fs.existsSync(out)) return out;
-  const tmp = out + '.part.mp4';
-  await run(['-i', media.path, '-map', '0:v:0', '-map', '0:a:0?', '-vf', `scale=-2:${height}:flags=bicubic,format=yuv420p`,
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-g', '12', '-bf', '0', '-tune', 'fastdecode',
-    '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', tmp], { duration: media.duration, onProgress, signal });
+  const tmp = out + (alpha ? '.part.webm' : '.part.mp4');
+  const fps = media.fps || 30, g = String(Math.max(6, Math.round(fps / 2)));
+  const vf = `scale=-2:${height}:flags=bilinear,format=${alpha ? 'yuva420p' : 'yuv420p'}`;
+  if (alpha) {
+    await run(['-c:v', 'libvpx-vp9', '-i', media.path, '-map', '0:v:0', '-map', '0:a:0?', '-vf', vf, '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1', '-b:v', '0', '-crf', '30', '-g', g, '-auto-alt-ref', '0', '-c:a', 'libopus', '-b:a', '128k', tmp], { duration: media.duration, onProgress, signal });
+  } else {
+    const enc = await detectEncoders();
+    const hw = enc.h264_nvenc ? ['-c:v', 'h264_nvenc', '-preset', 'p1', '-rc', 'constqp', '-qp', '23']
+      : enc.h264_amf ? ['-c:v', 'h264_amf', '-quality', 'speed', '-rc', 'cqp', '-qp_i', '22', '-qp_p', '24']
+      : enc.h264_qsv ? ['-c:v', 'h264_qsv', '-preset', 'veryfast', '-global_quality', '24']
+      : ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-tune', 'fastdecode'];
+    const go = async (hwdec, venc) => run([...(hwdec ? ['-hwaccel', 'auto'] : []), '-i', media.path, '-map', '0:v:0', '-map', '0:a:0?', '-vf', vf, ...venc, '-g', g, '-bf', '0', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', tmp], { duration: media.duration, onProgress, signal });
+    try { await go(true, hw); }
+    catch (e) { if (signal?.aborted) throw e; await go(false, ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-tune', 'fastdecode']); }
+  }
   fs.renameSync(tmp, out);
   return out;
 }

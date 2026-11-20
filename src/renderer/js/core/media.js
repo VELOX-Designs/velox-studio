@@ -78,11 +78,19 @@ export function prepareMedia(m) {
   }
   if (m.type === 'video') {
     const unsupported = ['prores', 'dnxhd', 'cfhd', 'mpeg2video', 'mpeg4', 'msmpeg4v3', 'wmv3', 'vc1', 'hap', 'mjpeg', 'qtrle', 'rawvideo', 'ffv1', 'h263', 'flv1', 'gif'].includes(m.vcodec) || (m.pixfmt || '').includes('422') || (m.pixfmt || '').includes('444') || (m.pixfmt || '').includes('10');
-    const big = m.height > settings.proxyAboveHeight;
     if (m.proxyPath && fs.existsSync(m.proxyPath)) return;
-    if (unsupported || (settings.autoProxy && big)) createProxy(m);
+    if (unsupported) createProxy(m); else if (settings.autoProxy) maybeProxy(m);
   }
 }
+// edit-friendly proxy when the original is heavy: above 1080p, high-fps 1080p+, or long GOP (few keyframes → slow seeking)
+export async function maybeProxy(m) {
+  if (m.type !== 'video' || m._proxying || (m.proxyPath && fs.existsSync(m.proxyPath))) return;
+  if (m.proxyPath) m.proxyPath = null;
+  let need = (m.height || 0) > 1080 || (m.width || 0) > 1920 || ((m.fps || 0) > 40 && (m.height || 0) >= 1080);
+  if (!need && (m.duration || 0) > 4) { const { keyframeGap } = await import('./ffmpeg.js'); need = (await keyframeGap(m.path).catch(() => 0)) > 3; }
+  if (need) createProxy(m);
+}
+bus.on('project:loaded', () => { if (settings.autoProxy === false) return; setTimeout(() => { for (const m of store.p.media) if (m.type === 'video' && fs.existsSync(m.path)) maybeProxy(m); }, 800); });
 
 export function createProxy(m) {
   if (m._proxying) return;
@@ -90,7 +98,7 @@ export function createProxy(m) {
   bus.emit('media:progress', m.id, 0);
   return addJob('Proxy', async () => {
     try {
-      const p = await makeProxy(m, { height: Math.min(settings.proxyHeight, m.height || 720), onProgress: (x) => bus.emit('media:progress', m.id, x) });
+      const p = await makeProxy(m, { height: Math.min(settings.proxyHeight || 720, m.height || 720), onProgress: (x) => bus.emit('media:progress', m.id, x) });
       const mm = store.media(m.id) || m;
       mm.proxyPath = p; store.dirty = true;
       bus.emit('media:progress', m.id, null);
