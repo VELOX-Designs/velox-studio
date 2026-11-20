@@ -251,7 +251,7 @@ export function buildAudioGraph(P, rangeStart, rangeEnd, inputOffset) {
 }
 
 // ------------------------------------------------------------------ export provider
-class ExportProvider {
+export class ExportProvider {
   constructor(P, W, H) { this.P = P; this.W = W; this.H = H; this.readers = new Map(); this.frames = new Map(); this.images = new Map(); this.reversed = new Map(); }
   async prepareReverse() {
     for (const c of this.P.clips.filter((c) => c.type === 'video' && c.reverse)) {

@@ -6,7 +6,7 @@ import { L, N } from '../core/i18n.js';
 import { settings } from '../core/settings.js';
 import { EFFECTS, EFFECT_CATS, defaultParams } from '../render/effects.js';
 import { TRANSITIONS, DIRS } from '../render/transitions.js';
-import { TEXT_ANIMS_IN, TEXT_ANIMS_OUT, TEXT_LOOPS } from '../render/text.js';
+import { TEXT_ANIMS_IN, TEXT_ANIMS_OUT, TEXT_LOOPS, CAPTION_STYLES } from '../render/text.js';
 import { BLEND_MODES } from '../render/compositor.js';
 import { numberProp, selectProp, colorProp, boolProp, section, curvesEditor, colorWheel, rampEditor, liveEdit, liveCommit, updaters } from './widgets.js';
 import { run } from '../core/commands.js';
@@ -195,6 +195,13 @@ function textPanel(c, lt) {
     } }, L('Schrift importieren…', 'Import font…')));
   return el('div', {},
     section(L('Inhalt', 'Content'), [ta]),
+    t.words?.length ? section('💬 ' + L('Untertitel-Animation', 'Caption animation'), [
+      selectProp({ label: L('Wort-Effekt', 'Word effect'), value: t.cap || 'none', options: Object.entries(CAPTION_STYLES).map(([k, v]) => [k, N(v)]), onChange: set('cap') }),
+      colorProp({ label: L('Highlight-Farbe', 'Highlight colour'), obj: t, key: 'hiColor', ltFn: lt }),
+      colorProp({ label: L('Box-Farbe', 'Box colour'), obj: t, key: 'hiBg', ltFn: lt }),
+      c.caption ? el('div', { class: 'muted', style: { fontSize: '11px', margin: '6px 0 2px' } }, L('Stil für ALLE Untertitel:', 'Style for ALL captions:')) : null,
+      c.caption ? el('div', { class: 'chips' }, ...(window.__capPresets || []).map((p) => el('span', { class: 'chip' + (c.caption.preset === p.id ? ' on' : ''), onclick: () => run('captionStyle', { preset: p.id }) }, p.name))) : null,
+      c.caption ? el('div', { class: 'chips' }, ...[['bottom', L('Unten', 'Bottom')], ['center', L('Mitte', 'Center')], ['top', L('Oben', 'Top')]].map(([k, n]) => el('span', { class: 'chip' + (c.caption.pos === k ? ' on' : ''), onclick: () => run('captionStyle', { pos: k }) }, '⇕ ' + n))) : null]) : null,
     section(L('Schrift', 'Font'), [
       selectProp({ label: L('Schriftart', 'Font'), value: t.font, options: [...new Set([t.font, ...fonts])].map((f) => [f, f]), onChange: set('font') }), fontRow,
       numberProp({ label: L('Größe', 'Size'), obj: t, key: 'size', min: 8, max: 600, step: 1, keyframes: false, ltFn: lt }),
@@ -407,6 +414,8 @@ function aiPanel(c, lt) {
       b(L('Highlights finden', 'Find highlights'), 'aiHighlights'),
       b(L('Automatische Untertitel', 'Auto subtitles'), 'aiSubtitles')]),
     isVid ? section(L('Tracking & Stabilisierung', 'Tracking & stabilization'), [
+      b('🙈 ' + L('Gesichter automatisch zensieren…', 'Auto-censor faces…'), 'censorFacesDialog'),
+      b('▦ ' + L('Objekt zensieren / Tracking-Maske…', 'Censor object / tracked mask…'), 'censorObject'),
       b(L('Objekt verfolgen (Bereich wählen)…', 'Track object (select region)…'), 'aiTrack'),
       b(L('Stabilisieren (vid.stab)', 'Stabilize (vid.stab)'), 'aiStabilize'),
       b(L('Auto-Reframe auf Projektformat', 'Auto reframe to project format'), 'aiReframe')]) : null,

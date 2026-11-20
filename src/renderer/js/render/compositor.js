@@ -8,6 +8,7 @@ import './transitions3.js';
 import './transitions4.js';
 import './effects2.js';
 import './effects3.js';
+import './censor.js';
 import './effects4.js';
 import { ShapeRenderer } from './shapes.js';
 import { TextRenderer } from './text.js';
@@ -213,7 +214,7 @@ export class Compositor {
       const P = evalParams(fx, lt);
       const out = this.temp();
       try {
-        if (d.passes) d.passes(this.fxCtx(lt), cur, out, P, { clip });
+        if (d.passes) d.passes(this.fxCtx(lt), cur, out, P, { clip, fx });
         else {
           const u = { u_lt: lt };
           const tx = {};
@@ -346,6 +347,14 @@ export class Compositor {
       return null;
     }
     return acc;
+  }
+  // draw a cached frame (ImageBitmap / canvas) straight to the screen
+  drawCached(img) {
+    const tex = this.sourceTexture('__rcache', img, img.width, img.height, undefined);
+    if (!tex) return false;
+    this.g.bind(null);
+    this.pass('rcache', `${GLSL_HEADER} void main(){ o = texture(u_tex, vec2(v_uv.x, 1.0 - v_uv.y)); }`, tex, null);
+    return true;
   }
   emptyLayer() { const t = this.temp(); this.g.clear(t); return t; }
   // read final frame pixels (RGBA, bottom-up)

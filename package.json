@@ -1,7 +1,7 @@
 {
   "name": "velox-studio",
   "productName": "VELOX Studio",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "VELOX Studio – eigenes Videoschnittprogramm mit GPU-Effekten, 3D, KI und Auto-Edit",
   "main": "src/main/main.js",
   "scripts": {

@@ -96,6 +96,7 @@ export class GL {
     for (const [name, v] of Object.entries(uniforms)) {
       const l = p.loc[name]; if (!l) continue;
       if (typeof v === 'number' || typeof v === 'boolean') gl.uniform1f(l, +v);
+      else if (v._vec4) gl.uniform4fv(l, v);
       else if (v.length === 2) gl.uniform2fv(l, v);
       else if (v.length === 3) gl.uniform3fv(l, v);
       else if (v.length === 4) gl.uniform4fv(l, v);

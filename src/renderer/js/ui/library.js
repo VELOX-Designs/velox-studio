@@ -387,6 +387,8 @@ function aiTab(body) {
     item('🎨', L('KI-Farbabgleich', 'AI color match'), L('Clip B an Look von Clip A angleichen', 'Match clip B to clip A'), 'colorMatch'),
     el('h4', {}, L('Bild & Video', 'Image & video')),
     item('🌅', 'VELOX Realism', L('Realistischerer Look per GPU (jede Grafikkarte)', 'More realistic look via GPU (any graphics card)'), 'applyPreset', { id: 'real_photo' }),
+    item('🙈', L('Gesichter zensieren', 'Censor faces'), L('KI findet & verfolgt jedes Gesicht → verpixeln / Blur / Balken', 'AI finds & follows every face → pixelate / blur / bar'), 'censorFacesDialog'),
+    item('▦', L('Objekt zensieren / Tracking-Maske', 'Censor object / tracked mask'), L('Bereich wählen → folgt dem Objekt (Kennzeichen, Logos, Maske)', 'Pick a region → follows the object (plates, logos, mask)'), 'censorObject'),
     item('🎯', L('Objekt-Tracking', 'Object tracking'), L('Bereich verfolgen → Text/Clip folgt', 'Track a region → text/clip follows'), 'aiTrack'),
     item('📐', 'Auto-Reframe', L('Auf 9:16 / 1:1 umformatieren und Motiv folgen', 'Reformat to 9:16 / 1:1 and follow the subject'), 'aiReframe'),
     item('🫨', L('Stabilisieren', 'Stabilize'), L('Verwackelte Aufnahmen glätten (vid.stab)', 'Smooth shaky footage (vid.stab)'), 'aiStabilize'),

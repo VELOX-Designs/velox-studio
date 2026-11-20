@@ -13,6 +13,11 @@ export const TEXT_ANIMS_OUT = {
   zoomOut: { de: 'Zoom raus', en: 'Zoom out' }, typeOut: { de: 'Löschen (Typewriter)', en: 'Type out' }, blurOut: { de: 'Unschärfe raus', en: 'Blur out' },
   letterFly: { de: 'Buchstaben wegfliegen', en: 'Letters fly away' },
 };
+export const CAPTION_STYLES = {
+  none: { de: 'Ohne Wort-Animation', en: 'No word animation' }, pop: { de: 'Pop (aktives Wort)', en: 'Pop (active word)' }, highlight: { de: 'Farbe (aktives Wort)', en: 'Colour (active word)' },
+  box: { de: 'Box hinter Wort', en: 'Box behind word' }, reveal: { de: 'Wort für Wort erscheinen', en: 'Reveal word by word' }, karaoke: { de: 'Karaoke (füllt sich)', en: 'Karaoke fill' },
+  dim: { de: 'Kommende Wörter blass', en: 'Upcoming words dimmed' }, bounce: { de: 'Hüpfen', en: 'Bounce' },
+};
 export const TEXT_LOOPS = { none: { de: 'Keine', en: 'None' }, wave: { de: 'Welle', en: 'Wave' }, pulse: { de: 'Puls', en: 'Pulse' }, shake: { de: 'Zittern', en: 'Jitter' }, float: { de: 'Schweben', en: 'Float' }, rainbow: { de: 'Regenbogen', en: 'Rainbow' } };
 
 const eo = EASINGS.easeOut, bo = EASINGS.backOut;
@@ -66,6 +71,29 @@ export class TextRenderer {
       }
     });
     const n = glyphs.length || 1, nw = Math.max(1, wi);
+    // word-timed captions: t.words = [[t0, t1], ...] (clip-local seconds), t.cap = style
+    const WT = Array.isArray(t.words) && t.words.length && t.cap && t.cap !== 'none' ? t.words : null;
+    let act = -1; const wb = [];
+    if (WT) {
+      for (let i = 0; i < WT.length; i++) if (lt >= WT[i][0] && lt < WT[i][1]) { act = i; break; }
+      if (act < 0) for (let i = WT.length - 1; i >= 0; i--) if (lt >= WT[i][0]) { act = lt < WT[i][1] + 0.35 ? i : -1; break; }
+      for (const gl of glyphs) { if (gl.word < 0 || /\s/.test(gl.ch)) continue; const b = wb[gl.word] ||= { x0: 1e9, x1: -1e9, y: gl.y }; b.x0 = Math.min(b.x0, gl.x); b.x1 = Math.max(b.x1, gl.x + gl.w); }
+    }
+    const hi = t.hiColor || '#ffe14d';
+    const wordFx = (wd) => { // per word: [alpha, scale, dy, colour] for caption styles
+      if (!WT || wd < 0) return null; const w0 = WT[wd]?.[0] ?? 0, isA = wd === act, past = lt >= w0;
+      const pk = Math.min(1, Math.max(0, (lt - w0) / 0.16)); let a = 1, sc = 1, dy = 0, col = null;
+      switch (t.cap) {
+        case 'highlight': if (isA) col = hi; break;
+        case 'pop': if (isA) { col = hi; sc = 1 + 0.14 * bo(pk); } break;
+        case 'box': if (isA) { col = t.hiText || null; sc = 1 + 0.06 * bo(pk); } break;
+        case 'reveal': if (!past) return [0, 1, 0, null]; a = eo(pk); sc = 0.6 + 0.4 * bo(pk); if (isA) col = hi; break;
+        case 'karaoke': if (past) col = hi; else a = 0.55; break;
+        case 'dim': if (!past) a = 0.38; else if (isA) col = hi; break;
+        case 'bounce': if (isA) { col = hi; dy = -Math.sin(Math.min(1, (lt - w0) / 0.25) * Math.PI) * size * 0.16; } break;
+      }
+      return [a, sc, dy, col];
+    };
     // global anim
     let gAlpha = 1, gScale = 1, gDx = 0, gDy = 0, gBlur = 0, gRot = 0;
     const ai = t.anim || 'none', ao = t.animOut || 'none';
@@ -97,6 +125,13 @@ export class TextRenderer {
       this.roundRect(g, bx - pad, H / 2 - totalH / 2 - pad, bw + pad * 2, totalH + pad * 2, (t.bgRadius || 0) * scale);
       g.fill();
     }
+    if (WT && t.cap === 'box' && act >= 0 && wb[act]) {
+      const b = wb[act], wf = wordFx(act), pad = size * 0.16, k = wf ? wf[1] : 1;
+      const cx = (b.x0 + b.x1) / 2, cy = b.y - size * 0.35, bw = (b.x1 - b.x0 + pad * 2) * k, bh = size * 1.18 * k;
+      g.save(); g.fillStyle = t.hiBg || '#22c55e'; this.roundRect(g, cx - bw / 2, cy - bh / 2, bw, bh, size * 0.22); g.fill(); g.restore();
+    }
+    let actExt = 0, actLine = -1;
+    if (WT && act >= 0 && wb[act]) { const f = wordFx(act), b = wb[act]; actExt = ((f ? f[1] : 1) - 1) * (b.x1 - b.x0) / 2 + (t.cap === 'box' ? size * 0.12 : 0); actLine = glyphs.find((x) => x.word === act)?.line ?? -1; }
     // fill style (gradient)
     let fill = t.color || '#fff';
     if (t.color2) {
@@ -116,6 +151,10 @@ export class TextRenderer {
       if (ai === 'glitchIn' && pin < 1) { const r = Math.sin(gl.i * 91.7 + Math.floor(tsec * 30) * 13.3); if (r > pin * 2 - 1) { dx += r * size * 0.3; a *= pin; col = r > 0.5 ? '#ff0050' : '#00f0ff'; } }
       if (ai === 'spread') { dx += (gl.x + gl.w / 2 - W / 2) * (1 - eo(pin)) * 0.6; a *= eo(pin); }
       if (ai === 'karaoke') { if (fi > pin) col = t.color2 ? '#888888' : 'rgba(255,255,255,0.35)'; }
+      let wsc = 1, wcx = 0, wcy = 0;
+      const wf = WT ? wordFx(gl.word) : null;
+      if (wf) { if (wf[0] <= 0.001) return; a *= wf[0]; wsc = wf[1]; dy += wf[2]; if (wf[3]) col = wf[3]; const b = wb[gl.word]; if (b) { wcx = (b.x0 + b.x1) / 2; wcy = b.y - size * 0.35; }
+        if (actExt && gl.word !== act && gl.line === actLine) dx += gl.word < act ? -actExt : actExt; } // make room for the enlarged / boxed active word
       if (ao === 'typeOut' && pout > 0 && gl.i >= Math.floor((1 - pout) * n)) return;
       if (ao === 'letterFly' && pout > 0) { const k = Math.min(1, Math.max(0, pout * 1.6 - fi * 0.6)); dy -= EASINGS.easeIn(k) * size * 3; rot += k * 90; a *= 1 - k; }
       const loop = t.loop || 'none';
@@ -128,6 +167,7 @@ export class TextRenderer {
       g.save();
       g.globalAlpha = gAlpha * a;
       const cx = gl.x + gl.w / 2, cy = gl.y - size * 0.35;
+      if (wsc !== 1) { g.translate(wcx, wcy); g.scale(wsc, wsc); g.translate(-wcx, -wcy); }
       g.translate(cx + dx, cy + dy); g.rotate((rot * Math.PI) / 180); g.scale(sc, sc); g.translate(-cx, -cy);
       if (pass === 'extrude') {
         g.fillStyle = t.extrudeColor || '#111';

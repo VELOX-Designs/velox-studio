@@ -1,5 +1,6 @@
 // Canvas timeline: multi-track editing, trimming, snapping, magnetic main track, transitions,
 // keyframe markers, waveforms, filmstrips, drag & drop from libraries and Explorer.
+import { renderCache } from '../playback/rendercache.js';
 import { trWindow, setTransitionOverlap } from '../core/project.js';
 import { store, clipEnd, clearRange, splitAt, splitClipAt, trimClipStart, trimClipEnd, removeClip, rippleTrack, maxDurFor, sourceLength, dropBrokenTransitions, newTrack, speedAt } from '../core/project.js';
 import { bus, el, $, clamp, tc, throttleRaf, uid } from '../core/util.js';
@@ -47,6 +48,7 @@ export function initTimeline() {
   canvas.addEventListener('dragleave', () => { tl.dropGhost = null; draw(); });
   $('#tl-scroll-h').addEventListener('scroll', (e) => { if (!tl._syncScroll) { tl.scrollX = e.target.scrollLeft; draw(); } });
   bus.on('changed', () => { layoutRows(); draw(); renderHeaders(); });
+  bus.on('rendercache', () => draw());
   bus.on('time', () => { followPlayhead(); draw(); });
   bus.on('selection', draw);
   bus.on('thumbs', draw);
@@ -236,6 +238,8 @@ function drawRuler(g) {
     if (isMajor && t >= 0) { g.fillStyle = '#8a92a4'; g.fillText(major < 1 ? tc(t, fps) : tc(t, fps).slice(0, 8), x + 4, 4); }
   }
   const P = store.p;
+  // render cache bar: green = rendered (plays smoothly)
+  if (renderCache.enabled) { g.fillStyle = '#2bd47a'; for (const [a, b] of renderCache.ranges()) { const xa = Math.max(0, t2x(a)), xb = Math.min(W, t2x(b)); if (xb > xa) g.fillRect(xa, RULER - 4, Math.max(1, xb - xa), 3); } }
   if (P.inPoint != null) { const x = t2x(P.inPoint); g.fillStyle = '#1ec8d4'; g.fillRect(x, 0, 2, RULER); g.fillText('IN', x + 4, 17); }
   if (P.outPoint != null) { const x = t2x(P.outPoint); g.fillStyle = '#1ec8d4'; g.fillRect(x - 2, 0, 2, RULER); g.fillText('OUT', x - 26, 17); }
   for (const m of P.markers) {

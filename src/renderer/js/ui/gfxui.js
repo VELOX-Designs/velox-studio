@@ -43,6 +43,7 @@ export function shapePanel(c, lt) {
 
 // ------------------------------------------------------------------ effect extras (inside effect cards)
 export function fxExtras(c, fx) {
+  if (viewer.fxExtras?.[fx.type]) return viewer.fxExtras[fx.type](c, fx);
   if (fx.type === 'bezmask') {
     const editing = viewer.editFx?.fxId === fx.id;
     return el('div', { class: 'row' },
@@ -72,6 +73,7 @@ function setParam(fx, key, value, lt) { fx.params[key] = isKf(fx.params[key]) ? 
 viewer.customOverlay = (ov, W, H) => {
   const r = fxRef(); if (!r) return false;
   const { c, fx, kind } = r; const lt = clamp(store.time - c.start, 0, c.dur);
+  if (kind === 'censor') return viewer.censorOverlay?.(ov, W, H) || false;
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('width', W); svg.setAttribute('height', H); Object.assign(svg.style, { position: 'absolute', left: 0, top: 0, pointerEvents: 'auto', cursor: 'crosshair' });
   const NS = svg.namespaceURI; const mk = (tag, attrs) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };

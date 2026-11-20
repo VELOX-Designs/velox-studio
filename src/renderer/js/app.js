@@ -41,6 +41,8 @@ async function boot() {
   await import('./ai/neural.js');
   await import('./ai/dlss5.js');
   await import('./ai/neuralrender.js');
+  await import('./ai/censor.js');
+  await import('./ai/captions.js');
   await import('./photo/photo.js');
   await import('./core/sequences.js');
   await import('./ui/gfxui.js');

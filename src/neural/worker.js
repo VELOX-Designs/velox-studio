@@ -172,6 +172,33 @@ async function matte(sess, rgba, w, h, kind) {
     w = Math.max(16, Math.round(outW / scale)) & ~1; h = Math.max(16, Math.round(outH / scale)) & ~1;
   }
   if (cfg.task === 'face') { det = await session(cfg.models.yoloface); gfp = await session(cfg.models.gfpgan); }
+  if (cfg.task === 'facedetect') {
+    // face boxes only (for censoring): full frame + overlapping 2x2 tiles so small/far faces are found too
+    det = await session(cfg.models.yoloface);
+    while (w > 1920) { w = Math.round(w * 0.75) & ~1; h = Math.round(h * 0.75) & ~1; }
+    const conf = cfg.conf || 0.35; const rd = reader(cfg.input, isImage ? 0 : start, isImage ? 0 : dur, w, h, fps);
+    const frames = []; const t0 = Date.now(); let n = 0;
+    const tw = Math.round(w * 0.58) & ~1, th = Math.round(h * 0.58) & ~1;
+    for (;;) {
+      const f = await rd.next(); if (!f) break;
+      let faces = await detectFaces(det, f, w, h, conf);
+      if (cfg.small !== false && w >= 900) {
+        for (const [ox, oy] of [[0, 0], [w - tw, 0], [0, h - th], [w - tw, h - th]]) {
+          const sub = Buffer.alloc(tw * th * 4); for (let y = 0; y < th; y++) f.copy(sub, y * tw * 4, ((oy + y) * w + ox) * 4, ((oy + y) * w + ox + tw) * 4);
+          for (const x of await detectFaces(det, sub, tw, th, conf + 0.05)) { x.box = [x.box[0] + ox, x.box[1] + oy, x.box[2] + ox, x.box[3] + oy]; faces.push(x); }
+        }
+        faces.sort((a, b) => b.score - a.score); const keep = [];
+        for (const x of faces) if (!keep.some((g) => iou(x.box, g.box) > 0.3 || (x.box[0] >= g.box[0] - 4 && x.box[1] >= g.box[1] - 4 && x.box[2] <= g.box[2] + 4 && x.box[3] <= g.box[3] + 4))) keep.push(x);
+        faces = keep;
+      }
+      frames.push({ t: +(n / fps).toFixed(4), f: faces.map((x) => [x.box[0] / w, x.box[1] / h, (x.box[2] - x.box[0]) / w, (x.box[3] - x.box[1]) / h, +x.score.toFixed(3)]) });
+      n++; const el = (Date.now() - t0) / 1000; const total = isImage ? 1 : Math.max(1, Math.round(dur * fps));
+      log('PROGRESS', Math.min(1, n / total).toFixed(4), `Gesichter suchen: Frame ${n}/${total} · ${(n / el).toFixed(1)} fps`);
+    }
+    rd.kill();
+    fs.writeFileSync(cfg.output, JSON.stringify({ fps, w, h, frames }));
+    log('DONE', cfg.output); process.exit(0);
+  }
   if (cfg.task === 'dlss5') {
     // full-res frames; SR runs on a 1/4 copy and re-invents texture detail at full size
     while (w > 3840) { w = Math.round(w * 0.75) & ~1; h = Math.round(h * 0.75) & ~1; }

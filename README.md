@@ -34,12 +34,14 @@ FFmpeg ist im Installer enthalten. KI-Modelle werden erst geladen, wenn du eine 
 
 | | |
 |---|---|
-| 🎬 **Schnitt** | Magnetische Timeline, Schneiden am Playhead, Snapping mit Einrast-Linie, Sequenzen, Multicam, Quell-Monitor |
+| 🎬 **Schnitt** | Magnetische Timeline, Schneiden am Playhead, Snapping mit Einrast-Linie, Sequenzen, Multicam, Quell-Monitor, **Render-Cache** (grüner Balken = läuft flüssig, rendert in Pausen automatisch vor) |
 | 🧩 **Vorlagen** | **Vorlagen Eigene** (nachgebaut aus echten Edits) + 177 TikTok-/Cinematic-Vorlagen (Car Edits, Blaulicht, Hype, Gaming/RP …) – **auch ein einziges langes Video reicht, die KI sucht die besten Stellen**. Eigene Vorlagen aus deinem Edit oder aus einem fertigen Video (Schnitte 1:1) |
 | 🌀 **Übergänge** | **1100+** GPU-Übergänge, die die Clips verschmelzen – Länge frei einstellbar |
 | 🎨 **Effekte & Farbe** | 185 Effekte, Filter/Looks, Farbräder, Kurven, LUTs, 3D-Ebenen mit Kamera, Keyframes & Graph-Editor |
 | ⚡ **Tempo & Audio** | Velocity/Speed-Ramps, KI-Zeitlupe, Stimm-Effekte, Mixer, Beat-Erkennung, Soundeffekte-Bibliothek |
-| 🧠 **KI (lokal)** | **Neural Rendering** (generativ realistischer, Stärke bis „GTA“), DLSS5, Hochskalieren, Gesichter, Hintergrund entfernen, Untertitel (Whisper), Auto-Edit |
+| 🧠 **KI (lokal)** | **Neural Rendering** (generativ realistischer, Stärke bis „GTA“), DLSS5, Hochskalieren, Gesichter, Hintergrund entfernen, Auto-Edit |
+| 💬 **Animierte Untertitel** | Whisper hört zu, jedes Wort wird im Takt animiert – 10 TikTok-Stile (Pop, Box, Karaoke, Wort für Wort, Neon …), Stil jederzeit für alle änderbar |
+| 🙈 **Zensur & Tracking-Maske** | KI findet und verfolgt **jedes Gesicht** automatisch → verpixeln, weichzeichnen oder Balken; Objekte (Kennzeichen, Logos) per Rahmen verfolgen; Maske „nur Bereich zeigen / ausschneiden“ |
 | 📷 **Foto-Modus** | Ebenen, Auswahl, Pinsel, Stempel, Text, Filter + KI: generatives Füllen/Entfernen, Motiv auswählen |
 | 📤 **Export** | 720p bis 8K, Hoch- oder Querformat, H.264/H.265/AV1/ProRes, GPU-Encoder |
 

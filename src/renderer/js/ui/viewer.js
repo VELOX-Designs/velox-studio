@@ -1,4 +1,5 @@
 // Program monitor: GPU preview canvas, quality, on-canvas transform gizmo, safe zones, scopes feed.
+import { renderCache } from '../playback/rendercache.js';
 import { store, clipEnd } from '../core/project.js';
 import { bus, el, $, tc, clamp } from '../core/util.js';
 import { settings, setSetting } from '../core/settings.js';
@@ -32,6 +33,8 @@ export function initViewer() {
   watchContext(canvas);
   engine.init(compositor);
   engine.onRender = (t) => renderNow(t);
+  engine.onCached = (bm) => { if (bm.width !== canvas.width || bm.height !== canvas.height) return false; try { if (!compositor.drawCached(bm)) return false; } catch (e) { console.warn(e); return false; } lastFrameMs = 0.5; bus.emit('frame', store.time); return true; };
+  renderCache.engine = engine; renderCache.init(canvas);
   const q = $('#preview-quality');
   q.innerHTML = '';
   [['auto', 'Auto'], ['full', L('Voll', 'Full')], ['half', '1/2'], ['quarter', '1/4']].forEach(([v, n]) => q.appendChild(el('option', { value: v }, L('Vorschau: ', 'Preview: ') + n)));

@@ -6,6 +6,7 @@ import { bus, fileUrl, clamp } from '../core/util.js';
 import { activeVisualLayers, neededClips } from '../render/compositor.js';
 import { settings } from '../core/settings.js';
 import { makeReversed } from '../core/ffmpeg.js';
+import { renderCache } from './rendercache.js';
 
 const LOOKAHEAD = 2.5;
 
@@ -258,7 +259,10 @@ class Engine {
     if (this.needsRender && this.compositor && this.onRender) {
       // a visible video that has never shown a frame yet → keep the previous picture instead of drawing black
       if (!this.playing && !this.framesReady(t) && (this._holdTries = (this._holdTries || 0) + 1) < 40) return;
-      this._holdTries = 0; this.needsRender = this.playing; this.onRender(t);
+      this._holdTries = 0; this.needsRender = this.playing;
+      const bm = this.playing && this.onCached ? renderCache.frameFor(t) : null;
+      if (bm && this.onCached(bm)) return;
+      this.onRender(t);
     }
   }
   syncVideos(t) {

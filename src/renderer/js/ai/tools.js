@@ -364,6 +364,7 @@ registerCommands([
     return picks.map((s) => srcToTl(c, s));
   } },
   { id: 'aiSubtitles', name: { de: 'Automatische Untertitel', en: 'Auto subtitles' }, cat: 'ai', args: '{ lang?, style? }', run: async ({ lang, style } = {}) => {
+    if (!style) { const cap = await import('./captions.js'); return lang ? cap.createCaptions({ lang }) : cap.captionsDialog(); }
     const c = selAudioish(); const m = store.media(c.mediaId);
     if (!lang) {
       lang = await new Promise((res) => { const s = el('select', {}, el('option', { value: 'auto' }, 'Auto'), el('option', { value: 'de' }, 'Deutsch'), el('option', { value: 'en' }, 'English'), el('option', { value: 'fr' }, 'Français'), el('option', { value: 'es' }, 'Español'), el('option', { value: 'tr' }, 'Türkçe')); s.value = settings.lang;
