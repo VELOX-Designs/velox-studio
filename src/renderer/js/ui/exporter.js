@@ -73,6 +73,7 @@ export function openExportDialog() {
     else if (S.height > S.width) { st.w = h; st.h = Math.round((h * S.height) / S.width / 2) * 2; }
     else { st.h = h; st.w = Math.round((h * S.width) / S.height / 2) * 2; }
     wIn.value = st.w; hIn.value = st.h;
+    if (Math.max(st.w, st.h) > 4096 && st.codec === 'h264') { st.codec = 'h265'; if (st.fmt !== 'mp4' && st.fmt !== 'mov' && st.fmt !== 'mkv') st.fmt = 'mp4'; try { codecSel.value = 'h265'; fmtSel.value = st.fmt; } catch {} toast(L('8K/6K: auf H.265 umgestellt – die Grafikkarte kann H.264 nur bis 4K, H.265 geht bis 8K und ist viel schneller', 'Switched to H.265 for >4K (GPU H.264 only up to 4K)'), '', 7000); }
   }
   function applyPreset(id) {
     st.preset = id; const p = EXPORT_PRESETS.find((x) => x.id === id); if (!p) return;
@@ -149,7 +150,9 @@ export function openExportDialog() {
 function videoArgs(o, enc) {
   const q = o.q, br = o.kbps + 'k';
   const cbr = o.mode === 'cbr';
-  const hw = o.enc === 'auto' ? pickHw(o.codec, enc) : o.enc === 'cpu' ? null : o.enc;
+  const big = Math.max(o.w || 0, o.h || 0);
+  let hw = o.enc === 'auto' ? pickHw(o.codec, enc) : o.enc === 'cpu' ? null : o.enc;
+  if (hw && ((hw.startsWith('h264') && big > 4096) || big > 8192)) hw = null; // beyond the hardware limit -> software encoder
   const pf = o.ten && (o.codec === 'h265' || o.codec === 'av1') ? 'yuv420p10le' : 'yuv420p';
   if (o.codec === 'gif') return { vf: `fps=${o.fps},split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=sierra2_4a`, args: [] , gif: true };
   if (o.codec === 'prores') return { pf: 'yuv422p10le', args: ['-c:v', 'prores_ks', '-profile:v', '3', '-vendor', 'apl0'] };
@@ -159,9 +162,9 @@ function videoArgs(o, enc) {
     if (hw.endsWith('_nvenc')) return { pf, hw, args: ['-c:v', hw, '-preset', 'p6', '-tune', 'hq', ...(cbr ? ['-b:v', br] : ['-rc', 'vbr', '-cq', String(q), '-b:v', '0'])] };
     if (hw.endsWith('_qsv')) return { pf: 'nv12', hw, args: ['-c:v', hw, '-preset', 'slow', ...(cbr ? ['-b:v', br] : ['-global_quality', String(q)])] };
   }
-  if (o.codec === 'h265') return { pf, args: ['-c:v', 'libx265', '-preset', 'medium', ...(cbr ? ['-b:v', br] : ['-crf', String(q)]), '-tag:v', 'hvc1'] };
+  if (o.codec === 'h265') return { pf, args: ['-c:v', 'libx265', '-preset', big > 4096 ? 'faster' : 'medium', ...(cbr ? ['-b:v', br] : ['-crf', String(q)]), '-tag:v', 'hvc1'] };
   if (o.codec === 'av1') return { pf, args: ['-c:v', 'libsvtav1', '-preset', '7', ...(cbr ? ['-b:v', br] : ['-crf', String(q)])] };
-  return { pf, args: ['-c:v', 'libx264', '-preset', 'medium', ...(cbr ? ['-b:v', br, '-maxrate', br, '-bufsize', o.kbps * 2 + 'k'] : ['-crf', String(q)]), '-profile:v', 'high'] };
+  return { pf, args: ['-c:v', 'libx264', '-preset', big > 4096 ? 'faster' : 'medium', ...(cbr ? ['-b:v', br, '-maxrate', br, '-bufsize', o.kbps * 2 + 'k'] : ['-crf', String(q)]), '-profile:v', 'high'] };
 }
 function pickHw(codec, enc) {
   const m = { h264: ['h264_nvenc', 'h264_amf', 'h264_qsv'], h265: ['hevc_nvenc', 'hevc_amf', 'hevc_qsv'], av1: ['av1_nvenc', 'av1_amf', 'av1_qsv'] }[codec] || [];
@@ -346,23 +349,25 @@ export async function startExport(o, { silent = false } = {}) {
     const proc = spawn(FFMPEG, args, { windowsHide: true });
     let errLog = '';
     proc.stderr.on('data', (d) => { errLog += d.toString(); if (errLog.length > 60000) errLog = errLog.slice(-30000); });
-    const closed = new Promise((res) => proc.on('close', res));
+    let exited = false; const closed = new Promise((res) => proc.on('close', (c) => { exited = true; res(c); }));
+    const ffFail = () => new Error(L('FFmpeg hat abgebrochen: ', 'FFmpeg stopped: ') + (errLog.split('\n').filter((l) => /error|invalid|not supported|failed|exceed|unsupported/i.test(l)).slice(-3).join(' | ') || errLog.split('\n').slice(-4).join(' ')));
     proc.stdin.on('error', () => {});
     abort.signal.addEventListener('abort', () => { try { proc.kill('SIGKILL'); } catch {} });
     const t0 = performance.now();
     const pool = []; for (let i = 0; i < 3; i++) pool.push({ buf: new Uint8Array(W * H * 4), busy: false });
     for (let f = 0; f < total; f++) {
       if (abort.signal.aborted) throw new Error(L('Export abgebrochen', 'Export cancelled'));
+      if (exited) throw ffFail();
       const t = rs + f / fps;
       await prov.prepare(t);
       const target = comp.renderFrame(P, t, prov, { toScreen: false });
       let slot = pool.find((s) => !s.busy);
-      while (!slot) { await new Promise((r) => setTimeout(r, 1)); slot = pool.find((s) => !s.busy); }
+      while (!slot) { if (exited) throw ffFail(); await new Promise((r) => setTimeout(r, 1)); slot = pool.find((s) => !s.busy); }
       comp.readPixels(target, slot.buf);
       comp.free(target);
       slot.busy = true;
       const ok = proc.stdin.write(Buffer.from(slot.buf.buffer), () => { slot.busy = false; });
-      if (!ok) await new Promise((r) => proc.stdin.once('drain', r));
+      if (!ok) { await Promise.race([new Promise((r) => proc.stdin.once('drain', r)), closed]); if (exited) throw ffFail(); }
       job.done = f + 1;
       if (f % 4 === 0 || f === total - 1) {
         const el2 = (performance.now() - t0) / 1000; const rfps = (f + 1) / el2; const eta = (total - f - 1) / rfps;
@@ -373,7 +378,7 @@ export async function startExport(o, { silent = false } = {}) {
     }
     proc.stdin.end();
     const code = await closed;
-    if (code !== 0) throw new Error('FFmpeg: ' + errLog.split('\n').slice(-8).join('\n'));
+    if (code !== 0) throw ffFail();
     const size = fs.statSync(out).size;
     ui?.done(L(`Fertig: ${path.basename(out)} (${fmtBytes(size)}) in ${((performance.now() - t0) / 1000).toFixed(1)}s`, `Done: ${path.basename(out)} (${fmtBytes(size)})`));
     toast(L('Export fertig: ', 'Export done: ') + out, 'ok', 6000);
