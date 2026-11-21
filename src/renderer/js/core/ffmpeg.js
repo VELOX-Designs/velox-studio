@@ -184,7 +184,7 @@ export async function makeProxy(media, { height = 720, onProgress, signal } = {}
   if (fs.existsSync(out)) return out;
   const tmp = out + (alpha ? '.part.webm' : '.part.mp4');
   const fps = media.fps || 30, g = String(Math.max(6, Math.round(fps / 2)));
-  const vf = `scale=-2:${height}:flags=bilinear,format=${alpha ? 'yuva420p' : 'yuv420p'}`;
+  const vf = `scale=-2:${height}:flags=fast_bilinear,format=${alpha ? 'yuva420p' : 'yuv420p'}`;
   if (alpha) {
     await run(['-c:v', 'libvpx-vp9', '-i', media.path, '-map', '0:v:0', '-map', '0:a:0?', '-vf', vf, '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-deadline', 'realtime', '-cpu-used', '8', '-row-mt', '1', '-b:v', '0', '-crf', '30', '-g', g, '-auto-alt-ref', '0', '-c:a', 'libopus', '-b:a', '128k', tmp], { duration: media.duration, onProgress, signal });
   } else {
@@ -193,7 +193,7 @@ export async function makeProxy(media, { height = 720, onProgress, signal } = {}
       : enc.h264_amf ? ['-c:v', 'h264_amf', '-quality', 'speed', '-rc', 'cqp', '-qp_i', '22', '-qp_p', '24']
       : enc.h264_qsv ? ['-c:v', 'h264_qsv', '-preset', 'veryfast', '-global_quality', '24']
       : ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-tune', 'fastdecode'];
-    const go = async (hwdec, venc) => run([...(hwdec ? ['-hwaccel', 'auto'] : []), '-i', media.path, '-map', '0:v:0', '-map', '0:a:0?', '-vf', vf, ...venc, '-g', g, '-bf', '0', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', tmp], { duration: media.duration, onProgress, signal });
+    const go = async (hwdec, venc) => run([...(hwdec ? ['-hwaccel', 'auto'] : []), '-i', media.path, '-map', '0:v:0', '-map', '0:a:0?', '-filter_threads', '8', '-vf', vf, ...venc, '-g', g, '-bf', '0', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', tmp], { duration: media.duration, onProgress, signal });
     try { await go(true, hw); }
     catch (e) { if (signal?.aborted) throw e; await go(false, ['-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', '-tune', 'fastdecode']); }
   }

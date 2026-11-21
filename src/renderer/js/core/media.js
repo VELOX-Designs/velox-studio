@@ -83,28 +83,37 @@ export function prepareMedia(m) {
   }
 }
 // edit-friendly proxy when the original is heavy: above 1080p, high-fps 1080p+, or long GOP (few keyframes → slow seeking)
+const proxyBusy = new Set(), proxyNotNeeded = new Set(), proxyChecking = new Set();
+window.__proxyBusy = () => proxyBusy.size + proxyChecking.size;
+window.__proxyBusyPaths = () => new Set([...proxyBusy, ...proxyChecking]);
 export async function maybeProxy(m) {
-  if (m.type !== 'video' || m._proxying || (m.proxyPath && fs.existsSync(m.proxyPath))) return;
+  if (m.type !== 'video' || m._proxying || proxyBusy.has(m.path) || proxyNotNeeded.has(m.path) || (m.proxyPath && fs.existsSync(m.proxyPath))) return;
   if (m.proxyPath) m.proxyPath = null;
+  if (proxyChecking.has(m.path)) return; proxyChecking.add(m.path);
+  try {
   let need = (m.height || 0) > 1080 || (m.width || 0) > 1920 || ((m.fps || 0) > 40 && (m.height || 0) >= 1080);
   if (!need && (m.duration || 0) > 4) { const { keyframeGap } = await import('./ffmpeg.js'); need = (await keyframeGap(m.path).catch(() => 0)) > 3; }
-  if (need) createProxy(m);
+  if (need) createProxy(m); else proxyNotNeeded.add(m.path);
+  } finally { proxyChecking.delete(m.path); }
 }
+// projects built or replaced through the API / scripts never pass the import → check on every change (debounced)
+let scanT = null;
+bus.on('changed', () => { if (settings.autoProxy === false) return; clearTimeout(scanT); scanT = setTimeout(() => { for (const m of store.p.media) if (m.type === 'video' && !(m.proxyPath && fs.existsSync(m.proxyPath)) && !proxyBusy.has(m.path) && !proxyNotNeeded.has(m.path) && fs.existsSync(m.path)) maybeProxy(m); }, 1200); });
 bus.on('project:loaded', () => { if (settings.autoProxy === false) return; setTimeout(() => { for (const m of store.p.media) if (m.type === 'video' && fs.existsSync(m.path)) maybeProxy(m); }, 800); });
 
 export function createProxy(m) {
-  if (m._proxying) return;
-  m._proxying = true;
+  if (m._proxying || proxyBusy.has(m.path)) return;
+  m._proxying = true; proxyBusy.add(m.path);
   bus.emit('media:progress', m.id, 0);
   return addJob('Proxy', async () => {
     try {
       const p = await makeProxy(m, { height: Math.min(settings.proxyHeight || 720, m.height || 720), onProgress: (x) => bus.emit('media:progress', m.id, x) });
-      const mm = store.media(m.id) || m;
-      mm.proxyPath = p; store.dirty = true;
+      const same = store.p.media.filter((x) => x.path === m.path); if (!same.length) same.push(m);
+      for (const mm of same) mm.proxyPath = p; store.dirty = true;
       bus.emit('media:progress', m.id, null);
       bus.emit('toast', `Proxy fertig: ${m.name}`, 'ok');
       bus.emit('changed', 'proxy');
-    } finally { m._proxying = false; }
+    } finally { m._proxying = false; proxyBusy.delete(m.path); }
   }, 0);
 }
 

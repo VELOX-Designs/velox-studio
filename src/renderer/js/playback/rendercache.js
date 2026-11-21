@@ -44,6 +44,8 @@ class RenderCache {
     return this.pool;
   }
   playing() { return !!this.engine?.playing; }
+  // cache resolution: preview size, capped at 1280 px on the long side (4× less to encode/decode than 1080p+)
+  target() { const pw = this.preview?.width || 2, ph = this.preview?.height || 2; const k = Math.min(1, 1280 / Math.max(pw, ph)); return [Math.max(2, Math.round(pw * k / 2) * 2), Math.max(2, Math.round(ph * k / 2) * 2)]; }
   // ---------------------------------------------------------------- signatures
   segments(P = store.p, size = this.size) {
     if (P === store.p && this.segs && this.segs.size === size.join('x')) return this.segs;
@@ -78,7 +80,7 @@ class RenderCache {
   frameFor(t) {
     if (!this.enabled || !this.frames.size) return null;
     const fps = store.fps, fi = Math.round(t * fps);
-    if (this.size[0] !== this.preview?.width || this.size[1] !== this.preview?.height) return null;
+    const tg = this.target(); if (this.size[0] !== tg[0] || this.size[1] !== tg[1]) return null;
     for (let k = 0; k < 10; k++) this.decode(fi + k);
     for (const [k, bm] of this.bitmaps) if (k < fi - 2 || k > fi + 30) { bm.close?.(); this.bitmaps.delete(k); }
     const bm = this.valid(fi) ? this.bitmaps.get(fi) : null;
@@ -97,7 +99,6 @@ class RenderCache {
     if (!this.enabled || settings.renderCacheAuto === false) return;
     this.idleT = setTimeout(() => {
       if (this.playing() || this.job || window.__exporting) return;
-      if (store.p.media.some((m) => m._proxying)) { this.scheduleIdle(); return; } // proxies first – decoding the originals would be slow
       if (performance.now() - (this.lastInput || 0) < 1500) { this.scheduleIdle(); return; }
       this.renderRange(null, null, { auto: true }).catch((e) => console.warn('render cache', e));
     }, 1500);
@@ -129,7 +130,7 @@ class RenderCache {
     this.cancel();
     const job = (this.job = { cancelled: false, auto });
     const P = JSON.parse(JSON.stringify(store.p)); const fps = P.settings.fps || store.fps;
-    const W = this.preview.width, H = this.preview.height;
+    const [W, H] = this.target();
     if (this.size[0] !== W || this.size[1] !== H) { this.frames.clear(); this.bytes = 0; this.size = [W, H]; this.segs = null; }
     const dur = store.duration(); if (!(dur > 0)) { this.job = null; return 0; }
     a = Math.max(0, a ?? (P.inPoint != null && !auto ? P.inPoint : 0)); b = Math.min(dur, b ?? (P.outPoint != null && !auto ? P.outPoint : dur));
@@ -137,7 +138,10 @@ class RenderCache {
     // render order: from the playhead forward, then the part before it
     const f0 = Math.floor(a * fps), f1 = Math.ceil(b * fps), now = Math.min(f1, Math.max(f0, Math.round(store.time * fps)));
     const todo = []; for (let f = now; f < f1; f++) todo.push(f); for (let f = f0; f < now; f++) todo.push(f);
-    const need = todo.filter((f) => { const s = this.sigAt(f / fps, segs); return s !== 'empty' && this.frames.get(f)?.sig !== s; });
+    // parts whose video is still getting its proxy are skipped (decoding long-GOP originals is slow); they follow once it is ready
+    const busy = auto ? (window.__proxyBusyPaths?.() || new Set()) : new Set();
+    const waiting = busy.size ? P.clips.filter((c) => c.type === 'video' && busy.has(P.media.find((m) => m.id === c.mediaId)?.path)) : [];
+    const need = todo.filter((f) => { const t = f / fps; if (waiting.some((c) => t >= c.start - 0.05 && t < clipEnd(c) + 0.05)) return false; const s = this.sigAt(t, segs); return s !== 'empty' && this.frames.get(f)?.sig !== s; });
     if (!need.length) { this.job = null; return 0; }
     const { ExportProvider } = await import('../ui/exporter.js');
     const cv = (this.cv ||= document.createElement('canvas'));
