@@ -236,6 +236,8 @@ export function buildAudioGraph(P, rangeStart, rangeEnd, inputOffset) {
     if (c.fadeOut > 0) f.push(`afade=t=out:st=${Math.max(0, c.dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
     const delayMs = Math.max(0, Math.round(c.start * 1000));
     f.push(`adelay=${delayMs}:all=1`);
+    // adelay keeps the source timestamps; amix syncs by pts → re-stamp so every clip sits at its timeline position
+    f.push('asetpts=N/SR/TB');
     if (A.duck) {
       const rs = voiceRanges.filter(([a, b]) => b > c.start && a < clipEnd(c));
       if (rs.length) f.push(`volume=0.25:enable='${rs.map(([a, b]) => `between(t,${a.toFixed(3)},${b.toFixed(3)})`).join('+')}'`);

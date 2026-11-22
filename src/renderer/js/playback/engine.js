@@ -41,7 +41,10 @@ class Engine {
       this.splitter = this.ac.createChannelSplitter(2);
       this.anL = this.ac.createAnalyser(); this.anR = this.ac.createAnalyser();
       this.anL.fftSize = 1024; this.anR.fftSize = 1024;
-      this.master.connect(this.ac.destination);
+      // limiter like the export (alimiter 0.98) so loud clips don't clip in the preview either
+      this.limiter = this.ac.createDynamicsCompressor();
+      this.limiter.threshold.value = -1; this.limiter.knee.value = 0; this.limiter.ratio.value = 20; this.limiter.attack.value = 0.002; this.limiter.release.value = 0.08;
+      this.master.connect(this.limiter); this.limiter.connect(this.ac.destination);
       this.master.connect(this.splitter);
       this.splitter.connect(this.anL, 0); this.splitter.connect(this.anR, 1);
       this.meterBuf = new Float32Array(1024);
